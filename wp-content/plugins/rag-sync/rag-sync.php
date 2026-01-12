@@ -1,0 +1,239 @@
+<?php
+/**
+ * Plugin Name: RAG Sync
+ * Plugin URI: https://github.com/your-repo/rag-sync
+ * Description: Syncs WordPress/WooCommerce content to RAG backend for AI-powered chatbot
+ * Version: 1.0.0
+ * Author: Your Company
+ * Author URI: https://yourcompany.com
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: rag-sync
+ * Domain Path: /languages
+ * Requires at least: 6.0
+ * Requires PHP: 8.0
+ *
+ * WC requires at least: 8.0
+ * WC tested up to: 9.0
+ */
+
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// Plugin constants
+define('RAG_SYNC_VERSION', '1.0.0');
+define('RAG_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('RAG_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('RAG_SYNC_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+/**
+ * Main RAG Sync Plugin Class
+ */
+final class RAG_Sync {
+
+    /**
+     * Single instance
+     */
+    private static ?RAG_Sync $instance = null;
+
+    /**
+     * Admin settings handler
+     */
+    public ?RAG_Sync_Admin $admin = null;
+
+    /**
+     * Webhook sender
+     */
+    public ?RAG_Sync_Webhook $webhook = null;
+
+    /**
+     * Get single instance
+     */
+    public static function instance(): RAG_Sync {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
+     * Constructor
+     */
+    private function __construct() {
+        $this->load_dependencies();
+        $this->init_hooks();
+    }
+
+    /**
+     * Load required files
+     */
+    private function load_dependencies(): void {
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-admin.php';
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-webhook.php';
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-wordpress-hooks.php';
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-woocommerce-hooks.php';
+    }
+
+    /**
+     * Initialize hooks
+     */
+    private function init_hooks(): void {
+        // Initialize on plugins_loaded
+        add_action('plugins_loaded', [$this, 'init']);
+
+        // Activation/deactivation hooks
+        register_activation_hook(__FILE__, [$this, 'activate']);
+        register_deactivation_hook(__FILE__, [$this, 'deactivate']);
+
+        // Add settings link on plugins page
+        add_filter('plugin_action_links_' . RAG_SYNC_PLUGIN_BASENAME, [$this, 'add_settings_link']);
+    }
+
+    /**
+     * Initialize plugin components
+     */
+    public function init(): void {
+        // Initialize admin
+        $this->admin = new RAG_Sync_Admin();
+
+        // Initialize webhook sender
+        $this->webhook = new RAG_Sync_Webhook();
+
+        // Initialize WordPress hooks (posts, pages)
+        new RAG_Sync_WordPress_Hooks($this->webhook);
+
+        // Initialize WooCommerce hooks if available
+        if ($this->is_woocommerce_active()) {
+            new RAG_Sync_WooCommerce_Hooks($this->webhook);
+        }
+
+        // Load text domain
+        load_plugin_textdomain('rag-sync', false, dirname(RAG_SYNC_PLUGIN_BASENAME) . '/languages');
+    }
+
+    /**
+     * Plugin activation
+     */
+    public function activate(): void {
+        // Set default options
+        $defaults = [
+            'rag_sync_backend_url' => '',
+            'rag_sync_tenant_slug' => '',
+            'rag_sync_api_key' => '',
+            'rag_sync_webhook_secret' => '', // User must copy from RAG backend
+            'rag_sync_webhook_endpoint' => '', // User must copy from RAG backend
+            'rag_sync_enabled' => false,
+            'rag_sync_content_types' => [
+                'posts' => true,
+                'pages' => true,
+                'products' => true,
+                'categories' => true,
+                'coupons' => true,
+            ],
+            'rag_sync_last_sync' => null,
+            'rag_sync_sync_status' => 'idle',
+        ];
+
+        foreach ($defaults as $key => $value) {
+            if (get_option($key) === false) {
+                add_option($key, $value);
+            }
+        }
+
+        // Flush rewrite rules
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Plugin deactivation
+     */
+    public function deactivate(): void {
+        // Clean up scheduled events
+        wp_clear_scheduled_hook('rag_sync_full_sync');
+
+        // Flush rewrite rules
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Check if WooCommerce is active
+     */
+    public function is_woocommerce_active(): bool {
+        return class_exists('WooCommerce');
+    }
+
+    /**
+     * Add settings link to plugins page
+     */
+    public function add_settings_link(array $links): array {
+        $settings_link = sprintf(
+            '<a href="%s">%s</a>',
+            admin_url('options-general.php?page=rag-sync'),
+            __('Settings', 'rag-sync')
+        );
+        array_unshift($links, $settings_link);
+        return $links;
+    }
+
+    /**
+     * Get plugin option
+     */
+    public static function get_option(string $key, $default = null) {
+        return get_option('rag_sync_' . $key, $default);
+    }
+
+    /**
+     * Update plugin option
+     */
+    public static function update_option(string $key, $value): bool {
+        return update_option('rag_sync_' . $key, $value);
+    }
+
+    /**
+     * Check if sync is enabled
+     */
+    public static function is_enabled(): bool {
+        return (bool) self::get_option('enabled', false);
+    }
+
+    /**
+     * Get backend URL
+     */
+    public static function get_backend_url(): string {
+        return rtrim(self::get_option('backend_url', ''), '/');
+    }
+
+    /**
+     * Get API key
+     */
+    public static function get_api_key(): string {
+        return self::get_option('api_key', '');
+    }
+
+    /**
+     * Get webhook secret
+     */
+    public static function get_webhook_secret(): string {
+        return self::get_option('webhook_secret', '');
+    }
+
+    /**
+     * Check if content type is enabled
+     */
+    public static function is_content_type_enabled(string $type): bool {
+        $types = self::get_option('content_types', []);
+        return isset($types[$type]) && $types[$type];
+    }
+}
+
+/**
+ * Get RAG Sync instance
+ */
+function rag_sync(): RAG_Sync {
+    return RAG_Sync::instance();
+}
+
+// Initialize plugin
+rag_sync();

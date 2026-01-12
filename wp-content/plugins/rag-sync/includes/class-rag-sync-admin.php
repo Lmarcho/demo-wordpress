@@ -1,0 +1,658 @@
+<?php
+/**
+ * RAG Sync Admin Settings
+ *
+ * Handles the admin settings page and AJAX endpoints
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class RAG_Sync_Admin {
+
+    /**
+     * Constructor
+     */
+    public function __construct() {
+        add_action('admin_menu', [$this, 'add_admin_menu']);
+        add_action('admin_init', [$this, 'register_settings']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+
+        // AJAX handlers
+        add_action('wp_ajax_rag_sync_test_connection', [$this, 'ajax_test_connection']);
+        add_action('wp_ajax_rag_sync_trigger_full_sync', [$this, 'ajax_trigger_full_sync']);
+        add_action('wp_ajax_rag_sync_get_status', [$this, 'ajax_get_status']);
+    }
+
+    /**
+     * Add admin menu
+     */
+    public function add_admin_menu(): void {
+        add_options_page(
+            __('RAG Sync Settings', 'rag-sync'),
+            __('RAG Sync', 'rag-sync'),
+            'manage_options',
+            'rag-sync',
+            [$this, 'render_settings_page']
+        );
+    }
+
+    /**
+     * Register settings
+     */
+    public function register_settings(): void {
+        // Connection settings
+        register_setting('rag_sync_settings', 'rag_sync_backend_url', [
+            'type' => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_api_key', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_tenant_slug', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_webhook_secret', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_webhook_endpoint', [
+            'type' => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_enabled', [
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_content_types', [
+            'type' => 'array',
+            'default' => [
+                'posts' => true,
+                'pages' => true,
+                'products' => true,
+                'categories' => true,
+                'coupons' => true,
+            ],
+        ]);
+
+        // Connection section
+        add_settings_section(
+            'rag_sync_connection',
+            __('Connection Settings', 'rag-sync'),
+            [$this, 'render_connection_section'],
+            'rag-sync'
+        );
+
+        add_settings_field(
+            'rag_sync_backend_url',
+            __('Backend URL', 'rag-sync'),
+            [$this, 'render_backend_url_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        add_settings_field(
+            'rag_sync_tenant_slug',
+            __('Tenant Slug', 'rag-sync'),
+            [$this, 'render_tenant_slug_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        add_settings_field(
+            'rag_sync_api_key',
+            __('API Key', 'rag-sync'),
+            [$this, 'render_api_key_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        add_settings_field(
+            'rag_sync_webhook_secret',
+            __('Webhook Secret', 'rag-sync'),
+            [$this, 'render_webhook_secret_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        add_settings_field(
+            'rag_sync_webhook_endpoint',
+            __('Webhook Endpoint', 'rag-sync'),
+            [$this, 'render_webhook_endpoint_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        add_settings_field(
+            'rag_sync_enabled',
+            __('Enable Sync', 'rag-sync'),
+            [$this, 'render_enabled_field'],
+            'rag-sync',
+            'rag_sync_connection'
+        );
+
+        // Content types section
+        add_settings_section(
+            'rag_sync_content',
+            __('Content Types', 'rag-sync'),
+            [$this, 'render_content_section'],
+            'rag-sync'
+        );
+
+        add_settings_field(
+            'rag_sync_content_types',
+            __('Sync Content Types', 'rag-sync'),
+            [$this, 'render_content_types_field'],
+            'rag-sync',
+            'rag_sync_content'
+        );
+    }
+
+    /**
+     * Enqueue admin assets
+     */
+    public function enqueue_assets(string $hook): void {
+        if ($hook !== 'settings_page_rag-sync') {
+            return;
+        }
+
+        wp_enqueue_style(
+            'rag-sync-admin',
+            RAG_SYNC_PLUGIN_URL . 'assets/css/admin.css',
+            [],
+            RAG_SYNC_VERSION
+        );
+
+        wp_enqueue_script(
+            'rag-sync-admin',
+            RAG_SYNC_PLUGIN_URL . 'assets/js/admin.js',
+            ['jquery'],
+            RAG_SYNC_VERSION,
+            true
+        );
+
+        wp_localize_script('rag-sync-admin', 'ragSyncAdmin', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('rag_sync_nonce'),
+            'strings' => [
+                'testing' => __('Testing...', 'rag-sync'),
+                'syncing' => __('Syncing...', 'rag-sync'),
+                'success' => __('Success!', 'rag-sync'),
+                'error' => __('Error', 'rag-sync'),
+                'connected' => __('Connected', 'rag-sync'),
+                'disconnected' => __('Disconnected', 'rag-sync'),
+            ],
+        ]);
+    }
+
+    /**
+     * Render settings page
+     */
+    public function render_settings_page(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $last_sync = RAG_Sync::get_option('last_sync');
+        $sync_status = RAG_Sync::get_option('sync_status', 'idle');
+        $is_woocommerce = rag_sync()->is_woocommerce_active();
+        ?>
+        <div class="wrap rag-sync-settings">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+
+            <div class="rag-sync-status-bar">
+                <div class="status-item">
+                    <span class="status-label"><?php _e('Status:', 'rag-sync'); ?></span>
+                    <span class="status-value status-<?php echo esc_attr($sync_status); ?>" id="rag-sync-status">
+                        <?php echo esc_html(ucfirst($sync_status)); ?>
+                    </span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label"><?php _e('Last Sync:', 'rag-sync'); ?></span>
+                    <span class="status-value" id="rag-sync-last-sync">
+                        <?php echo $last_sync ? esc_html(human_time_diff(strtotime($last_sync)) . ' ago') : __('Never', 'rag-sync'); ?>
+                    </span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label"><?php _e('WooCommerce:', 'rag-sync'); ?></span>
+                    <span class="status-value <?php echo $is_woocommerce ? 'status-active' : 'status-inactive'; ?>">
+                        <?php echo $is_woocommerce ? __('Active', 'rag-sync') : __('Not Installed', 'rag-sync'); ?>
+                    </span>
+                </div>
+            </div>
+
+            <form method="post" action="options.php">
+                <?php
+                settings_fields('rag_sync_settings');
+                do_settings_sections('rag-sync');
+                submit_button();
+                ?>
+            </form>
+
+            <div class="rag-sync-actions">
+                <h2><?php _e('Actions', 'rag-sync'); ?></h2>
+
+                <div class="action-buttons">
+                    <button type="button" class="button button-secondary" id="rag-sync-test-connection">
+                        <?php _e('Test Connection', 'rag-sync'); ?>
+                    </button>
+
+                    <button type="button" class="button button-primary" id="rag-sync-full-sync">
+                        <?php _e('Trigger Full Sync', 'rag-sync'); ?>
+                    </button>
+                </div>
+
+                <div id="rag-sync-message" class="rag-sync-message" style="display: none;"></div>
+            </div>
+
+            <?php
+            $webhook_endpoint = RAG_Sync::get_option('webhook_endpoint', '');
+            $has_webhook_secret = !empty(RAG_Sync::get_option('webhook_secret', ''));
+            $is_configured = $webhook_endpoint && $has_webhook_secret;
+            ?>
+            <div class="rag-sync-webhook-info">
+                <h2><?php _e('Webhook Status', 'rag-sync'); ?></h2>
+                <p><?php _e('Real-time updates will be sent to your RAG backend when content changes.', 'rag-sync'); ?></p>
+
+                <table class="form-table">
+                    <tr>
+                        <th><?php _e('Configuration Status', 'rag-sync'); ?></th>
+                        <td>
+                            <?php if ($is_configured): ?>
+                                <span class="status-value status-active"><?php _e('Ready', 'rag-sync'); ?></span>
+                                <span class="description"><?php _e('Use "Test Connection" to verify the webhook secret.', 'rag-sync'); ?></span>
+                            <?php else: ?>
+                                <span class="status-value status-error"><?php _e('Incomplete', 'rag-sync'); ?></span>
+                                <?php if (!$webhook_endpoint): ?>
+                                    <p class="description"><?php _e('Missing: Webhook Endpoint', 'rag-sync'); ?></p>
+                                <?php endif; ?>
+                                <?php if (!$has_webhook_secret): ?>
+                                    <p class="description"><?php _e('Missing: Webhook Secret', 'rag-sync'); ?></p>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><?php _e('WordPress Site URL', 'rag-sync'); ?></th>
+                        <td>
+                            <code id="site-url"><?php echo esc_url(get_site_url()); ?></code>
+                            <button type="button" class="button button-small copy-btn" data-target="site-url">
+                                <?php _e('Copy', 'rag-sync'); ?>
+                            </button>
+                            <p class="description"><?php _e('Enter this URL as the WooCommerce Store URL in your RAG backend.', 'rag-sync'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="rag-sync-debug">
+                <h2><?php _e('Debug Information', 'rag-sync'); ?></h2>
+                <table class="form-table">
+                    <tr>
+                        <th><?php _e('WordPress Version', 'rag-sync'); ?></th>
+                        <td><?php echo esc_html(get_bloginfo('version')); ?></td>
+                    </tr>
+                    <tr>
+                        <th><?php _e('PHP Version', 'rag-sync'); ?></th>
+                        <td><?php echo esc_html(phpversion()); ?></td>
+                    </tr>
+                    <tr>
+                        <th><?php _e('Site URL', 'rag-sync'); ?></th>
+                        <td><?php echo esc_url(get_site_url()); ?></td>
+                    </tr>
+                    <?php if ($is_woocommerce): ?>
+                    <tr>
+                        <th><?php _e('WooCommerce Version', 'rag-sync'); ?></th>
+                        <td><?php echo esc_html(WC()->version); ?></td>
+                    </tr>
+                    <?php endif; ?>
+                </table>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render connection section description
+     */
+    public function render_connection_section(): void {
+        echo '<p>' . __('Configure the connection to your RAG backend server.', 'rag-sync') . '</p>';
+    }
+
+    /**
+     * Render content section description
+     */
+    public function render_content_section(): void {
+        echo '<p>' . __('Select which content types to sync to the RAG backend.', 'rag-sync') . '</p>';
+    }
+
+    /**
+     * Render backend URL field
+     */
+    public function render_backend_url_field(): void {
+        $value = RAG_Sync::get_option('backend_url', '');
+        ?>
+        <input type="url"
+               name="rag_sync_backend_url"
+               id="rag_sync_backend_url"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="https://your-rag-backend.com">
+        <p class="description">
+            <?php _e('The URL of your RAG backend server (e.g., https://api.yoursite.com)', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render tenant slug field
+     */
+    public function render_tenant_slug_field(): void {
+        $value = RAG_Sync::get_option('tenant_slug', '');
+        ?>
+        <input type="text"
+               name="rag_sync_tenant_slug"
+               id="rag_sync_tenant_slug"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="my-store">
+        <p class="description">
+            <?php _e('Your tenant slug in the RAG backend (used for webhook URL)', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render API key field
+     */
+    public function render_api_key_field(): void {
+        $value = RAG_Sync::get_option('api_key', '');
+        ?>
+        <input type="password"
+               name="rag_sync_api_key"
+               id="rag_sync_api_key"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="wgt_xxxxx">
+        <p class="description">
+            <?php _e('Widget API key from your RAG backend (starts with wgt_)', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render webhook secret field
+     */
+    public function render_webhook_secret_field(): void {
+        $value = RAG_Sync::get_option('webhook_secret', '');
+        ?>
+        <input type="password"
+               name="rag_sync_webhook_secret"
+               id="rag_sync_webhook_secret"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="whsec_wc_xxxxx">
+        <p class="description">
+            <?php _e('Copy the Webhook Secret from your RAG backend (Settings → WooCommerce Integration)', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render webhook endpoint field
+     */
+    public function render_webhook_endpoint_field(): void {
+        $value = RAG_Sync::get_option('webhook_endpoint', '');
+        $backend_url = RAG_Sync::get_option('backend_url', '');
+        $tenant_slug = RAG_Sync::get_option('tenant_slug', '');
+        $suggested = '';
+        if ($backend_url && $tenant_slug) {
+            $suggested = rtrim($backend_url, '/') . '/api/woocommerce/webhook/' . $tenant_slug;
+        }
+        ?>
+        <input type="url"
+               name="rag_sync_webhook_endpoint"
+               id="rag_sync_webhook_endpoint"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="<?php echo esc_attr($suggested); ?>">
+        <?php if ($suggested && $suggested !== $value): ?>
+        <button type="button" class="button button-small" id="rag-sync-auto-endpoint" data-endpoint="<?php echo esc_attr($suggested); ?>">
+            <?php _e('Use Default', 'rag-sync'); ?>
+        </button>
+        <?php endif; ?>
+        <p class="description">
+            <?php _e('The Laravel endpoint URL where webhooks will be sent. Copy from RAG backend settings.', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render enabled field
+     */
+    public function render_enabled_field(): void {
+        $value = RAG_Sync::get_option('enabled', false);
+        ?>
+        <label>
+            <input type="checkbox"
+                   name="rag_sync_enabled"
+                   id="rag_sync_enabled"
+                   value="1"
+                   <?php checked($value, true); ?>>
+            <?php _e('Enable automatic sync when content is created or updated', 'rag-sync'); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * Render content types field
+     */
+    public function render_content_types_field(): void {
+        $types = RAG_Sync::get_option('content_types', []);
+        $is_woocommerce = rag_sync()->is_woocommerce_active();
+
+        $available_types = [
+            'posts' => __('Blog Posts', 'rag-sync'),
+            'pages' => __('Pages', 'rag-sync'),
+        ];
+
+        if ($is_woocommerce) {
+            $available_types['products'] = __('Products', 'rag-sync');
+            $available_types['categories'] = __('Product Categories', 'rag-sync');
+            $available_types['coupons'] = __('Coupons', 'rag-sync');
+        }
+
+        foreach ($available_types as $key => $label) {
+            $checked = isset($types[$key]) && $types[$key];
+            ?>
+            <label style="display: block; margin-bottom: 8px;">
+                <input type="checkbox"
+                       name="rag_sync_content_types[<?php echo esc_attr($key); ?>]"
+                       value="1"
+                       <?php checked($checked, true); ?>>
+                <?php echo esc_html($label); ?>
+            </label>
+            <?php
+        }
+
+        if (!$is_woocommerce) {
+            ?>
+            <p class="description" style="margin-top: 10px;">
+                <?php _e('Install WooCommerce to sync products, categories, and coupons.', 'rag-sync'); ?>
+            </p>
+            <?php
+        }
+    }
+
+    /**
+     * AJAX: Test connection
+     */
+    public function ajax_test_connection(): void {
+        check_ajax_referer('rag_sync_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Permission denied', 'rag-sync')]);
+        }
+
+        $webhook_endpoint = RAG_Sync::get_option('webhook_endpoint', '');
+        $webhook_secret = RAG_Sync::get_option('webhook_secret', '');
+
+        if (empty($webhook_endpoint)) {
+            wp_send_json_error(['message' => __('Webhook Endpoint not configured', 'rag-sync')]);
+        }
+
+        if (empty($webhook_secret)) {
+            wp_send_json_error(['message' => __('Webhook Secret not configured', 'rag-sync')]);
+        }
+
+        // Send a test webhook with signature to verify both connectivity and secret
+        $payload = [
+            'topic' => 'connection.test',
+            'data' => [
+                'test' => true,
+                'timestamp' => current_time('c'),
+            ],
+            'site_url' => get_site_url(),
+            'timestamp' => current_time('c'),
+        ];
+
+        $body = wp_json_encode($payload);
+        $signature = base64_encode(hash_hmac('sha256', $body, $webhook_secret, true));
+
+        $response = wp_remote_post($webhook_endpoint, [
+            'timeout' => 15,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'X-WC-Webhook-Topic' => 'connection.test',
+                'X-WC-Webhook-Signature' => $signature,
+                'X-WC-Webhook-Source' => get_site_url(),
+            ],
+            'body' => $body,
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error([
+                'message' => __('Connection failed: ', 'rag-sync') . $response->get_error_message(),
+            ]);
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $data = json_decode($response_body, true);
+
+        if ($code === 401) {
+            wp_send_json_error([
+                'message' => __('Webhook Secret mismatch! The secret does not match what the backend expects.', 'rag-sync'),
+            ]);
+        } elseif ($code === 404) {
+            wp_send_json_error([
+                'message' => __('Webhook endpoint not found. Check the Webhook Endpoint URL.', 'rag-sync'),
+            ]);
+        } elseif ($code >= 200 && $code < 300) {
+            wp_send_json_success([
+                'message' => __('Connection successful! Webhook secret verified.', 'rag-sync'),
+                'data' => $data,
+            ]);
+        } else {
+            wp_send_json_error([
+                'message' => sprintf(__('Connection failed: HTTP %d', 'rag-sync'), $code),
+                'data' => $data,
+            ]);
+        }
+    }
+
+    /**
+     * AJAX: Trigger full sync
+     */
+    public function ajax_trigger_full_sync(): void {
+        check_ajax_referer('rag_sync_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Permission denied', 'rag-sync')]);
+        }
+
+        $webhook_endpoint = RAG_Sync::get_option('webhook_endpoint', '');
+        $webhook_secret = RAG_Sync::get_option('webhook_secret', '');
+
+        if (empty($webhook_endpoint) || empty($webhook_secret)) {
+            wp_send_json_error(['message' => __('Webhook Endpoint or Secret not configured', 'rag-sync')]);
+        }
+
+        // Update status
+        RAG_Sync::update_option('sync_status', 'syncing');
+
+        // Send sync trigger to backend
+        $payload = [
+            'topic' => 'sync.triggered',
+            'data' => [
+                'action' => 'full_sync',
+            ],
+            'site_url' => get_site_url(),
+            'timestamp' => current_time('c'),
+        ];
+
+        $body = wp_json_encode($payload);
+        $signature = base64_encode(hash_hmac('sha256', $body, $webhook_secret, true));
+
+        $response = wp_remote_post($webhook_endpoint, [
+            'timeout' => 30,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-WC-Webhook-Topic' => 'sync.triggered',
+                'X-WC-Webhook-Signature' => $signature,
+                'X-WC-Webhook-Source' => get_site_url(),
+            ],
+            'body' => $body,
+        ]);
+
+        if (is_wp_error($response)) {
+            RAG_Sync::update_option('sync_status', 'error');
+            wp_send_json_error([
+                'message' => $response->get_error_message(),
+            ]);
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code === 401) {
+            RAG_Sync::update_option('sync_status', 'error');
+            wp_send_json_error([
+                'message' => __('Webhook Secret mismatch! Check your configuration.', 'rag-sync'),
+            ]);
+        } elseif ($code >= 200 && $code < 300) {
+            RAG_Sync::update_option('last_sync', current_time('mysql'));
+            RAG_Sync::update_option('sync_status', 'idle');
+
+            wp_send_json_success([
+                'message' => __('Full sync triggered successfully!', 'rag-sync'),
+            ]);
+        } else {
+            RAG_Sync::update_option('sync_status', 'error');
+            wp_send_json_error([
+                'message' => sprintf(__('Sync failed: HTTP %d', 'rag-sync'), $code),
+            ]);
+        }
+    }
+
+    /**
+     * AJAX: Get status
+     */
+    public function ajax_get_status(): void {
+        check_ajax_referer('rag_sync_nonce', 'nonce');
+
+        wp_send_json_success([
+            'status' => RAG_Sync::get_option('sync_status', 'idle'),
+            'last_sync' => RAG_Sync::get_option('last_sync'),
+        ]);
+    }
+}

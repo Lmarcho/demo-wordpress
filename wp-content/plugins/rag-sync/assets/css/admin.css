@@ -1,0 +1,202 @@
+/**
+ * RAG Sync Admin Styles
+ */
+
+.rag-sync-settings {
+    max-width: 800px;
+}
+
+/* Status Bar */
+.rag-sync-status-bar {
+    display: flex;
+    gap: 30px;
+    padding: 15px 20px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    margin-bottom: 20px;
+    border-radius: 0 4px 4px 0;
+}
+
+.rag-sync-status-bar .status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rag-sync-status-bar .status-label {
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.rag-sync-status-bar .status-value {
+    padding: 2px 10px;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+.rag-sync-status-bar .status-idle {
+    background: #f0f0f1;
+    color: #50575e;
+}
+
+.rag-sync-status-bar .status-syncing {
+    background: #fff8e5;
+    color: #996800;
+}
+
+.rag-sync-status-bar .status-error {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+.rag-sync-status-bar .status-active {
+    background: #edfaef;
+    color: #00a32a;
+}
+
+.rag-sync-status-bar .status-inactive {
+    background: #f0f0f1;
+    color: #787c82;
+}
+
+/* Actions Section */
+.rag-sync-actions {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #c3c4c7;
+    margin-top: 20px;
+    border-radius: 4px;
+}
+
+.rag-sync-actions h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.rag-sync-actions .action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* Message Box */
+.rag-sync-message {
+    margin-top: 15px;
+    padding: 12px 15px;
+    border-radius: 4px;
+}
+
+.rag-sync-message.success {
+    background: #edfaef;
+    border: 1px solid #00a32a;
+    color: #00a32a;
+}
+
+.rag-sync-message.error {
+    background: #fcf0f1;
+    border: 1px solid #d63638;
+    color: #d63638;
+}
+
+.rag-sync-message.info {
+    background: #f0f6fc;
+    border: 1px solid #72aee6;
+    color: #2271b1;
+}
+
+/* Webhook Info */
+.rag-sync-webhook-info {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #c3c4c7;
+    margin-top: 20px;
+    border-radius: 4px;
+}
+
+.rag-sync-webhook-info h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.rag-sync-webhook-info code {
+    background: #f0f0f1;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 13px;
+    user-select: all;
+}
+
+.rag-sync-webhook-info .copy-btn {
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+/* Debug Info */
+.rag-sync-debug {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #c3c4c7;
+    margin-top: 20px;
+    border-radius: 4px;
+}
+
+.rag-sync-debug h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+/* Loading State */
+.rag-sync-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.rag-sync-loading::after {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #2271b1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Form Table Adjustments */
+.rag-sync-settings .form-table th {
+    width: 200px;
+}
+
+.rag-sync-settings .form-table input[type="url"],
+.rag-sync-settings .form-table input[type="text"],
+.rag-sync-settings .form-table input[type="password"] {
+    width: 100%;
+    max-width: 400px;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .rag-sync-status-bar {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .rag-sync-actions .action-buttons {
+        flex-direction: column;
+    }
+
+    .rag-sync-actions .action-buttons .button {
+        width: 100%;
+        text-align: center;
+    }
+}
