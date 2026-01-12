@@ -109,8 +109,59 @@ final class RAG_Sync {
             new RAG_Sync_WooCommerce_Hooks($this->webhook);
         }
 
+        // Initialize chat widget on frontend
+        add_action('wp_footer', [$this, 'render_chat_widget']);
+
         // Load text domain
         load_plugin_textdomain('rag-sync', false, dirname(RAG_SYNC_PLUGIN_BASENAME) . '/languages');
+    }
+
+    /**
+     * Render chat widget on frontend
+     */
+    public function render_chat_widget(): void {
+        // Only render if widget is enabled
+        if (!self::get_option('widget_enabled', false)) {
+            return;
+        }
+
+        $backend_url = self::get_backend_url();
+        $api_key = self::get_option('api_key', '');
+        $tenant_slug = self::get_option('tenant_slug', '');
+
+        if (empty($backend_url) || empty($api_key) || empty($tenant_slug)) {
+            return;
+        }
+
+        // Get widget configuration
+        $config = [
+            'tenant' => $tenant_slug,
+            'apiKey' => $api_key,
+            'apiUrl' => rtrim($backend_url, '/'),
+            'businessName' => get_bloginfo('name'),
+            'welcomeMessage' => self::get_option('widget_welcome_message', 'Hi! How can I help you today?'),
+            'placeholderText' => self::get_option('widget_placeholder', 'Type your message...'),
+            'primaryColor' => self::get_option('widget_primary_color', '#13AA75'),
+            'position' => self::get_option('widget_position', 'bottom-right'),
+            'size' => self::get_option('widget_size', 'medium'),
+        ];
+
+        $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js';
+        ?>
+        <script>
+            (function() {
+                var config = <?php echo wp_json_encode($config); ?>;
+                var script = document.createElement('script');
+                script.src = '<?php echo esc_url($widget_url); ?>';
+                script.onload = function() {
+                    if (typeof RAGWidget !== 'undefined') {
+                        RAGWidget.init(config);
+                    }
+                };
+                document.body.appendChild(script);
+            })();
+        </script>
+        <?php
     }
 
     /**
@@ -134,6 +185,13 @@ final class RAG_Sync {
             ],
             'rag_sync_last_sync' => null,
             'rag_sync_sync_status' => 'idle',
+            // Widget settings
+            'rag_sync_widget_enabled' => false,
+            'rag_sync_widget_welcome_message' => 'Hi! How can I help you today?',
+            'rag_sync_widget_placeholder' => 'Type your message...',
+            'rag_sync_widget_primary_color' => '#13AA75',
+            'rag_sync_widget_position' => 'bottom-right',
+            'rag_sync_widget_size' => 'medium',
         ];
 
         foreach ($defaults as $key => $value) {

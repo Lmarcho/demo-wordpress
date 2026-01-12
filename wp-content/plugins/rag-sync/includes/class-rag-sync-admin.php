@@ -155,6 +155,85 @@ class RAG_Sync_Admin {
             'rag-sync',
             'rag_sync_content'
         );
+
+        // Widget settings
+        register_setting('rag_sync_settings', 'rag_sync_widget_enabled', [
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_widget_welcome_message', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_widget_placeholder', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_widget_primary_color', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_hex_color',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_widget_position', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_widget_size', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ]);
+
+        // Widget section
+        add_settings_section(
+            'rag_sync_widget',
+            __('Chat Widget', 'rag-sync'),
+            [$this, 'render_widget_section'],
+            'rag-sync'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_enabled',
+            __('Enable Widget', 'rag-sync'),
+            [$this, 'render_widget_enabled_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_welcome_message',
+            __('Welcome Message', 'rag-sync'),
+            [$this, 'render_widget_welcome_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_placeholder',
+            __('Input Placeholder', 'rag-sync'),
+            [$this, 'render_widget_placeholder_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_primary_color',
+            __('Primary Color', 'rag-sync'),
+            [$this, 'render_widget_color_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_position',
+            __('Position', 'rag-sync'),
+            [$this, 'render_widget_position_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
     }
 
     /**
@@ -491,6 +570,95 @@ class RAG_Sync_Admin {
             </p>
             <?php
         }
+    }
+
+    /**
+     * Render widget section description
+     */
+    public function render_widget_section(): void {
+        echo '<p>' . __('Configure the AI chat widget that appears on your site.', 'rag-sync') . '</p>';
+    }
+
+    /**
+     * Render widget enabled field
+     */
+    public function render_widget_enabled_field(): void {
+        $value = RAG_Sync::get_option('widget_enabled', false);
+        ?>
+        <label>
+            <input type="checkbox"
+                   name="rag_sync_widget_enabled"
+                   id="rag_sync_widget_enabled"
+                   value="1"
+                   <?php checked($value, true); ?>>
+            <?php _e('Show chat widget on frontend', 'rag-sync'); ?>
+        </label>
+        <p class="description">
+            <?php _e('Requires API Key to be configured above.', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render widget welcome message field
+     */
+    public function render_widget_welcome_field(): void {
+        $value = RAG_Sync::get_option('widget_welcome_message', 'Hi! How can I help you today?');
+        ?>
+        <input type="text"
+               name="rag_sync_widget_welcome_message"
+               id="rag_sync_widget_welcome_message"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text">
+        <?php
+    }
+
+    /**
+     * Render widget placeholder field
+     */
+    public function render_widget_placeholder_field(): void {
+        $value = RAG_Sync::get_option('widget_placeholder', 'Type your message...');
+        ?>
+        <input type="text"
+               name="rag_sync_widget_placeholder"
+               id="rag_sync_widget_placeholder"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text">
+        <?php
+    }
+
+    /**
+     * Render widget color field
+     */
+    public function render_widget_color_field(): void {
+        $value = RAG_Sync::get_option('widget_primary_color', '#13AA75');
+        ?>
+        <input type="color"
+               name="rag_sync_widget_primary_color"
+               id="rag_sync_widget_primary_color"
+               value="<?php echo esc_attr($value); ?>">
+        <span style="margin-left: 10px; vertical-align: middle;"><?php echo esc_html($value); ?></span>
+        <?php
+    }
+
+    /**
+     * Render widget position field
+     */
+    public function render_widget_position_field(): void {
+        $value = RAG_Sync::get_option('widget_position', 'bottom-right');
+        $positions = [
+            'bottom-right' => __('Bottom Right', 'rag-sync'),
+            'bottom-left' => __('Bottom Left', 'rag-sync'),
+        ];
+        ?>
+        <select name="rag_sync_widget_position" id="rag_sync_widget_position">
+            <?php foreach ($positions as $key => $label): ?>
+                <option value="<?php echo esc_attr($key); ?>" <?php selected($value, $key); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php
     }
 
     /**
