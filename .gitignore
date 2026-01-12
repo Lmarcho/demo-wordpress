@@ -1,0 +1,16 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# WordPress secrets
+wp-config.php
+
+# Uploads and cache (usually not tracked)
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+
+# Logs
+*.log
+
