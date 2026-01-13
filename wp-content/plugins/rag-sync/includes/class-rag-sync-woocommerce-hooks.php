@@ -3,6 +3,7 @@
  * RAG Sync WooCommerce Hooks
  *
  * Handles WooCommerce product, category, and coupon hooks
+ * Tracks sync status in database table
  */
 
 if (!defined('ABSPATH')) {
@@ -15,6 +16,11 @@ class RAG_Sync_WooCommerce_Hooks {
      * Webhook sender
      */
     private RAG_Sync_Webhook $webhook;
+
+    /**
+     * Track items being processed to avoid duplicate webhooks
+     */
+    private array $processing = [];
 
     /**
      * Constructor
@@ -73,15 +79,30 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
+        // Avoid duplicate processing
+        $key = 'product_' . $product_id;
+        if (isset($this->processing[$key])) {
+            return;
+        }
+        $this->processing[$key] = true;
+
         // Only sync published products
         if ($product->get_status() !== 'publish') {
+            unset($this->processing[$key]);
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_PRODUCT_CREATED,
-            $this->webhook->build_product_payload($product)
-        );
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('product', $product_id, $product->get_name(), $product->get_sku());
+
+        $topic = RAG_Sync_Webhook::TOPIC_PRODUCT_CREATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_product_payload($product));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('product', $product_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('product', $product_id, $result ? 'synced' : 'failed');
+
+        unset($this->processing[$key]);
     }
 
     /**
@@ -92,20 +113,35 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
+        // Avoid duplicate processing
+        $key = 'product_' . $product_id;
+        if (isset($this->processing[$key])) {
+            return;
+        }
+        $this->processing[$key] = true;
+
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('product', $product_id, $product->get_name(), $product->get_sku());
+
         // Only sync published products
         if ($product->get_status() !== 'publish') {
             // If was published and now isn't, send delete
-            $this->webhook->send(
-                RAG_Sync_Webhook::TOPIC_PRODUCT_DELETED,
-                ['id' => $product_id]
-            );
+            $topic = RAG_Sync_Webhook::TOPIC_PRODUCT_DELETED;
+            $result = $this->webhook->send($topic, ['id' => $product_id]);
+            RAG_Sync_DB::record_webhook('product', $product_id, $topic, $result ? 'sent' : 'failed');
+            RAG_Sync_DB::update_status('product', $product_id, 'deleted');
+            unset($this->processing[$key]);
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_PRODUCT_UPDATED,
-            $this->webhook->build_product_payload($product)
-        );
+        $topic = RAG_Sync_Webhook::TOPIC_PRODUCT_UPDATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_product_payload($product));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('product', $product_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('product', $product_id, $result ? 'synced' : 'failed');
+
+        unset($this->processing[$key]);
     }
 
     /**
@@ -116,10 +152,12 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_PRODUCT_DELETED,
-            ['id' => $product_id]
-        );
+        $topic = RAG_Sync_Webhook::TOPIC_PRODUCT_DELETED;
+        $result = $this->webhook->send($topic, ['id' => $product_id]);
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('product', $product_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::mark_deleted('product', $product_id);
     }
 
     /**
@@ -188,10 +226,15 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_CATEGORY_CREATED,
-            $this->webhook->build_category_payload($term)
-        );
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('category', $term_id, $term->name);
+
+        $topic = RAG_Sync_Webhook::TOPIC_CATEGORY_CREATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_category_payload($term));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('category', $term_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('category', $term_id, $result ? 'synced' : 'failed');
     }
 
     /**
@@ -207,10 +250,15 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_CATEGORY_UPDATED,
-            $this->webhook->build_category_payload($term)
-        );
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('category', $term_id, $term->name);
+
+        $topic = RAG_Sync_Webhook::TOPIC_CATEGORY_UPDATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_category_payload($term));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('category', $term_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('category', $term_id, $result ? 'synced' : 'failed');
     }
 
     /**
@@ -221,10 +269,12 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_CATEGORY_DELETED,
-            ['id' => $term_id]
-        );
+        $topic = RAG_Sync_Webhook::TOPIC_CATEGORY_DELETED;
+        $result = $this->webhook->send($topic, ['id' => $term_id]);
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('category', $term_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::mark_deleted('category', $term_id);
     }
 
     // =========================================
@@ -241,10 +291,15 @@ class RAG_Sync_WooCommerce_Hooks {
 
         $coupon = new WC_Coupon($coupon_id);
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_COUPON_CREATED,
-            $this->webhook->build_coupon_payload($coupon)
-        );
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('coupon', $coupon_id, $coupon->get_code());
+
+        $topic = RAG_Sync_Webhook::TOPIC_COUPON_CREATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_coupon_payload($coupon));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('coupon', $coupon_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('coupon', $coupon_id, $result ? 'synced' : 'failed');
     }
 
     /**
@@ -257,10 +312,15 @@ class RAG_Sync_WooCommerce_Hooks {
 
         $coupon = new WC_Coupon($coupon_id);
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_COUPON_UPDATED,
-            $this->webhook->build_coupon_payload($coupon)
-        );
+        // Track in database
+        RAG_Sync_DB::get_or_create_item('coupon', $coupon_id, $coupon->get_code());
+
+        $topic = RAG_Sync_Webhook::TOPIC_COUPON_UPDATED;
+        $result = $this->webhook->send($topic, $this->webhook->build_coupon_payload($coupon));
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('coupon', $coupon_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::update_status('coupon', $coupon_id, $result ? 'synced' : 'failed');
     }
 
     /**
@@ -271,10 +331,12 @@ class RAG_Sync_WooCommerce_Hooks {
             return;
         }
 
-        $this->webhook->send(
-            RAG_Sync_Webhook::TOPIC_COUPON_DELETED,
-            ['id' => $coupon_id]
-        );
+        $topic = RAG_Sync_Webhook::TOPIC_COUPON_DELETED;
+        $result = $this->webhook->send($topic, ['id' => $coupon_id]);
+
+        // Update tracking
+        RAG_Sync_DB::record_webhook('coupon', $coupon_id, $topic, $result ? 'sent' : 'failed');
+        RAG_Sync_DB::mark_deleted('coupon', $coupon_id);
     }
 
     /**

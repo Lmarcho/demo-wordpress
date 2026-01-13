@@ -373,6 +373,8 @@ class RAG_Sync_Admin {
                 </table>
             </div>
 
+            <?php $this->render_sync_status_table(); ?>
+
             <div class="rag-sync-debug">
                 <h2><?php _e('Debug Information', 'rag-sync'); ?></h2>
                 <table class="form-table">
@@ -759,6 +761,9 @@ class RAG_Sync_Admin {
         // Update status
         RAG_Sync::update_option('sync_status', 'syncing');
 
+        // Populate tracking table with all existing content
+        $counts = $this->populate_sync_tracking_table();
+
         // Send sync trigger to backend
         $payload = [
             'topic' => 'sync.triggered',
@@ -801,8 +806,17 @@ class RAG_Sync_Admin {
             RAG_Sync::update_option('last_sync', current_time('mysql'));
             RAG_Sync::update_option('sync_status', 'idle');
 
+            // Mark all items as synced
+            $this->mark_all_items_synced();
+
             wp_send_json_success([
-                'message' => __('Full sync triggered successfully!', 'rag-sync'),
+                'message' => sprintf(
+                    __('Full sync triggered successfully! Tracked %d products, %d categories, %d coupons, %d pages.', 'rag-sync'),
+                    $counts['products'],
+                    $counts['categories'],
+                    $counts['coupons'],
+                    $counts['pages']
+                ),
             ]);
         } else {
             RAG_Sync::update_option('sync_status', 'error');
@@ -810,6 +824,110 @@ class RAG_Sync_Admin {
                 'message' => sprintf(__('Sync failed: HTTP %d', 'rag-sync'), $code),
             ]);
         }
+    }
+
+    /**
+     * Populate sync tracking table with all existing content
+     */
+    private function populate_sync_tracking_table(): array {
+        $counts = [
+            'products' => 0,
+            'categories' => 0,
+            'coupons' => 0,
+            'pages' => 0,
+        ];
+
+        // Products (if WooCommerce is active)
+        if (class_exists('WooCommerce') && RAG_Sync::is_content_type_enabled('products')) {
+            $products = wc_get_products([
+                'status' => 'publish',
+                'limit' => -1,
+                'type' => ['simple', 'variable', 'grouped', 'external'],
+            ]);
+
+            foreach ($products as $product) {
+                RAG_Sync_DB::get_or_create_item(
+                    'product',
+                    $product->get_id(),
+                    $product->get_name(),
+                    $product->get_sku()
+                );
+                $counts['products']++;
+            }
+        }
+
+        // Categories
+        if (class_exists('WooCommerce') && RAG_Sync::is_content_type_enabled('categories')) {
+            $categories = get_terms([
+                'taxonomy' => 'product_cat',
+                'hide_empty' => false,
+            ]);
+
+            if (!is_wp_error($categories)) {
+                foreach ($categories as $category) {
+                    RAG_Sync_DB::get_or_create_item(
+                        'category',
+                        $category->term_id,
+                        $category->name
+                    );
+                    $counts['categories']++;
+                }
+            }
+        }
+
+        // Coupons
+        if (class_exists('WooCommerce') && RAG_Sync::is_content_type_enabled('coupons')) {
+            $coupons = get_posts([
+                'post_type' => 'shop_coupon',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+            ]);
+
+            foreach ($coupons as $coupon_post) {
+                $coupon = new WC_Coupon($coupon_post->ID);
+                RAG_Sync_DB::get_or_create_item(
+                    'coupon',
+                    $coupon->get_id(),
+                    $coupon->get_code()
+                );
+                $counts['coupons']++;
+            }
+        }
+
+        // Pages
+        if (RAG_Sync::is_content_type_enabled('pages')) {
+            $pages = get_posts([
+                'post_type' => 'page',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+            ]);
+
+            foreach ($pages as $page) {
+                RAG_Sync_DB::get_or_create_item(
+                    'page',
+                    $page->ID,
+                    $page->post_title
+                );
+                $counts['pages']++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Mark all items as synced after full sync completes
+     */
+    private function mark_all_items_synced(): void {
+        global $wpdb;
+        $table_name = RAG_Sync_DB::get_table_name();
+
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$table_name} SET status = %s, last_synced = %s, last_webhook_topic = %s WHERE status != 'deleted'",
+            'synced',
+            current_time('mysql'),
+            'sync.triggered'
+        ));
     }
 
     /**
@@ -822,5 +940,178 @@ class RAG_Sync_Admin {
             'status' => RAG_Sync::get_option('sync_status', 'idle'),
             'last_sync' => RAG_Sync::get_option('last_sync'),
         ]);
+    }
+
+    /**
+     * Render sync status table
+     */
+    private function render_sync_status_table(): void {
+        // Get filter parameters
+        $type_filter = isset($_GET['sync_type']) ? sanitize_text_field($_GET['sync_type']) : '';
+        $status_filter = isset($_GET['sync_status']) ? sanitize_text_field($_GET['sync_status']) : '';
+        $search = isset($_GET['sync_search']) ? sanitize_text_field($_GET['sync_search']) : '';
+        $page = isset($_GET['sync_page']) ? max(1, intval($_GET['sync_page'])) : 1;
+
+        // Get items
+        $result = RAG_Sync_DB::get_items([
+            'type' => $type_filter,
+            'status' => $status_filter,
+            'search' => $search,
+            'page' => $page,
+            'per_page' => 20,
+        ]);
+
+        $items = $result['items'];
+        $total = $result['total'];
+        $pages = $result['pages'];
+
+        // Get stats
+        $stats = RAG_Sync_DB::get_stats();
+        ?>
+        <div class="rag-sync-items">
+            <h2><?php _e('Sync Status', 'rag-sync'); ?></h2>
+
+            <!-- Stats summary -->
+            <div class="sync-stats-summary">
+                <div class="stat-box">
+                    <span class="stat-number"><?php echo esc_html($stats['total']); ?></span>
+                    <span class="stat-label"><?php _e('Total Items', 'rag-sync'); ?></span>
+                </div>
+                <div class="stat-box stat-synced">
+                    <span class="stat-number"><?php echo esc_html($stats['by_status']['synced'] ?? 0); ?></span>
+                    <span class="stat-label"><?php _e('Synced', 'rag-sync'); ?></span>
+                </div>
+                <div class="stat-box stat-pending">
+                    <span class="stat-number"><?php echo esc_html($stats['by_status']['pending'] ?? 0); ?></span>
+                    <span class="stat-label"><?php _e('Pending', 'rag-sync'); ?></span>
+                </div>
+                <div class="stat-box stat-failed">
+                    <span class="stat-number"><?php echo esc_html($stats['by_status']['failed'] ?? 0); ?></span>
+                    <span class="stat-label"><?php _e('Failed', 'rag-sync'); ?></span>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="sync-filters">
+                <form method="get" action="">
+                    <input type="hidden" name="page" value="rag-sync">
+
+                    <select name="sync_type">
+                        <option value=""><?php _e('All Types', 'rag-sync'); ?></option>
+                        <option value="product" <?php selected($type_filter, 'product'); ?>><?php _e('Products', 'rag-sync'); ?></option>
+                        <option value="category" <?php selected($type_filter, 'category'); ?>><?php _e('Categories', 'rag-sync'); ?></option>
+                        <option value="coupon" <?php selected($type_filter, 'coupon'); ?>><?php _e('Coupons', 'rag-sync'); ?></option>
+                        <option value="page" <?php selected($type_filter, 'page'); ?>><?php _e('Pages', 'rag-sync'); ?></option>
+                    </select>
+
+                    <select name="sync_status">
+                        <option value=""><?php _e('All Statuses', 'rag-sync'); ?></option>
+                        <option value="synced" <?php selected($status_filter, 'synced'); ?>><?php _e('Synced', 'rag-sync'); ?></option>
+                        <option value="pending" <?php selected($status_filter, 'pending'); ?>><?php _e('Pending', 'rag-sync'); ?></option>
+                        <option value="failed" <?php selected($status_filter, 'failed'); ?>><?php _e('Failed', 'rag-sync'); ?></option>
+                        <option value="deleted" <?php selected($status_filter, 'deleted'); ?>><?php _e('Deleted', 'rag-sync'); ?></option>
+                    </select>
+
+                    <input type="text" name="sync_search" value="<?php echo esc_attr($search); ?>" placeholder="<?php _e('Search by name or SKU...', 'rag-sync'); ?>">
+
+                    <button type="submit" class="button"><?php _e('Filter', 'rag-sync'); ?></button>
+                    <a href="<?php echo admin_url('options-general.php?page=rag-sync'); ?>" class="button"><?php _e('Reset', 'rag-sync'); ?></a>
+                </form>
+            </div>
+
+            <?php if (empty($items)): ?>
+                <p class="no-items"><?php _e('No items found. Items will appear here when you sync content or when content is created/updated.', 'rag-sync'); ?></p>
+            <?php else: ?>
+                <!-- Items table -->
+                <table class="wp-list-table widefat fixed striped sync-items-table">
+                    <thead>
+                        <tr>
+                            <th class="column-type"><?php _e('Type', 'rag-sync'); ?></th>
+                            <th class="column-name"><?php _e('Name', 'rag-sync'); ?></th>
+                            <th class="column-sku"><?php _e('SKU', 'rag-sync'); ?></th>
+                            <th class="column-status"><?php _e('Status', 'rag-sync'); ?></th>
+                            <th class="column-webhook"><?php _e('Last Webhook', 'rag-sync'); ?></th>
+                            <th class="column-synced"><?php _e('Last Synced', 'rag-sync'); ?></th>
+                            <th class="column-actions"><?php _e('Actions', 'rag-sync'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($items as $item): ?>
+                            <tr>
+                                <td class="column-type">
+                                    <span class="item-type item-type-<?php echo esc_attr($item->item_type); ?>">
+                                        <?php echo esc_html(ucfirst($item->item_type)); ?>
+                                    </span>
+                                </td>
+                                <td class="column-name">
+                                    <strong><?php echo esc_html($item->item_name); ?></strong>
+                                    <br><small class="item-id">ID: <?php echo esc_html($item->item_id); ?></small>
+                                </td>
+                                <td class="column-sku">
+                                    <?php echo $item->item_sku ? esc_html($item->item_sku) : '<span class="na">—</span>'; ?>
+                                </td>
+                                <td class="column-status">
+                                    <span class="sync-status sync-status-<?php echo esc_attr($item->status); ?>">
+                                        <?php echo esc_html(ucfirst($item->status)); ?>
+                                    </span>
+                                    <?php if ($item->status === 'failed' && $item->error_message): ?>
+                                        <br><small class="error-message" title="<?php echo esc_attr($item->error_message); ?>">
+                                            <?php echo esc_html(wp_trim_words($item->error_message, 5)); ?>
+                                        </small>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="column-webhook">
+                                    <?php if ($item->last_webhook_at): ?>
+                                        <span title="<?php echo esc_attr($item->last_webhook_topic); ?>">
+                                            <?php echo esc_html(human_time_diff(strtotime($item->last_webhook_at)) . ' ago'); ?>
+                                        </span>
+                                        <br><small><?php echo esc_html($item->last_webhook_topic); ?></small>
+                                    <?php else: ?>
+                                        <span class="na">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="column-synced">
+                                    <?php if ($item->last_synced): ?>
+                                        <?php echo esc_html(human_time_diff(strtotime($item->last_synced)) . ' ago'); ?>
+                                        <br><small><?php echo esc_html($item->sync_count); ?> <?php _e('syncs', 'rag-sync'); ?></small>
+                                    <?php else: ?>
+                                        <span class="na"><?php _e('Never', 'rag-sync'); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="column-actions">
+                                    <button type="button"
+                                            class="button button-small sync-item-btn"
+                                            data-type="<?php echo esc_attr($item->item_type); ?>"
+                                            data-id="<?php echo esc_attr($item->item_id); ?>">
+                                        <?php _e('Sync Now', 'rag-sync'); ?>
+                                    </button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+
+                <!-- Pagination -->
+                <?php if ($pages > 1): ?>
+                    <div class="sync-pagination">
+                        <?php
+                        $base_url = add_query_arg([
+                            'page' => 'rag-sync',
+                            'sync_type' => $type_filter,
+                            'sync_status' => $status_filter,
+                            'sync_search' => $search,
+                        ], admin_url('options-general.php'));
+
+                        for ($i = 1; $i <= $pages; $i++):
+                            $url = add_query_arg('sync_page', $i, $base_url);
+                            $class = $i === $page ? 'button button-primary' : 'button';
+                        ?>
+                            <a href="<?php echo esc_url($url); ?>" class="<?php echo $class; ?>"><?php echo $i; ?></a>
+                        <?php endfor; ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <?php
     }
 }

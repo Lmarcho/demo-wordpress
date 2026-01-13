@@ -70,8 +70,10 @@ final class RAG_Sync {
      * Load required files
      */
     private function load_dependencies(): void {
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-db.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-admin.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-webhook.php';
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-rest-api.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-wordpress-hooks.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-woocommerce-hooks.php';
     }
@@ -100,6 +102,9 @@ final class RAG_Sync {
 
         // Initialize webhook sender
         $this->webhook = new RAG_Sync_Webhook();
+
+        // Initialize REST API for real-time product data
+        new RAG_Sync_REST_API();
 
         // Initialize WordPress hooks (posts, pages)
         new RAG_Sync_WordPress_Hooks($this->webhook);
@@ -168,6 +173,14 @@ final class RAG_Sync {
      * Plugin activation
      */
     public function activate(): void {
+        // Load DB class if not already loaded
+        if (!class_exists('RAG_Sync_DB')) {
+            require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-db.php';
+        }
+
+        // Create sync tracking table
+        RAG_Sync_DB::create_table();
+
         // Set default options
         $defaults = [
             'rag_sync_backend_url' => '',
@@ -199,6 +212,9 @@ final class RAG_Sync {
                 add_option($key, $value);
             }
         }
+
+        // Update database version
+        update_option('rag_sync_db_version', '1.0.0');
 
         // Flush rewrite rules
         flush_rewrite_rules();
