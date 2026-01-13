@@ -123,6 +123,9 @@ final class RAG_Sync {
 
     /**
      * Render chat widget on frontend
+     *
+     * Widget styling (colors, messages, position) is configured in Laravel backend.
+     * This only provides essential connection config.
      */
     public function render_chat_widget(): void {
         // Only render if widget is enabled
@@ -138,17 +141,11 @@ final class RAG_Sync {
             return;
         }
 
-        // Get widget configuration
+        // Essential config only - widget fetches styling from Laravel backend
         $config = [
             'tenant' => $tenant_slug,
             'apiKey' => $api_key,
             'apiUrl' => rtrim($backend_url, '/'),
-            'businessName' => get_bloginfo('name'),
-            'welcomeMessage' => self::get_option('widget_welcome_message', 'Hi! How can I help you today?'),
-            'placeholderText' => self::get_option('widget_placeholder', 'Type your message...'),
-            'primaryColor' => self::get_option('widget_primary_color', '#13AA75'),
-            'position' => self::get_option('widget_position', 'bottom-right'),
-            'size' => self::get_option('widget_size', 'medium'),
         ];
 
         $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js';
@@ -198,13 +195,8 @@ final class RAG_Sync {
             ],
             'rag_sync_last_sync' => null,
             'rag_sync_sync_status' => 'idle',
-            // Widget settings
+            // Widget enabled flag only - styling is managed in Laravel backend
             'rag_sync_widget_enabled' => false,
-            'rag_sync_widget_welcome_message' => 'Hi! How can I help you today?',
-            'rag_sync_widget_placeholder' => 'Type your message...',
-            'rag_sync_widget_primary_color' => '#13AA75',
-            'rag_sync_widget_position' => 'bottom-right',
-            'rag_sync_widget_size' => 'medium',
         ];
 
         foreach ($defaults as $key => $value) {
