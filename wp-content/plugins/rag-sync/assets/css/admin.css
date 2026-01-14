@@ -280,22 +280,32 @@
 /* Sync Items Table */
 .sync-items-table {
     margin-top: 10px;
+    table-layout: auto !important; /* Override WordPress fixed layout */
 }
 
 .sync-items-table .column-type {
-    width: 80px;
+    width: 90px;
+    white-space: nowrap;
+}
+
+.sync-items-table .column-name {
+    min-width: 200px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .sync-items-table .column-sku {
     width: 100px;
+    white-space: nowrap;
 }
 
 .sync-items-table .column-status {
-    width: 100px;
+    width: 90px;
+    white-space: nowrap;
 }
 
 .sync-items-table .column-webhook {
-    width: 140px;
+    width: 130px;
 }
 
 .sync-items-table .column-synced {
@@ -303,7 +313,8 @@
 }
 
 .sync-items-table .column-actions {
-    width: 100px;
+    width: 90px;
+    white-space: nowrap;
 }
 
 .sync-items-table .item-id {

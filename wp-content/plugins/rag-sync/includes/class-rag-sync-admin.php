@@ -905,7 +905,7 @@ class RAG_Sync_Admin {
                 <p class="no-items"><?php _e('No items found. Items will appear here when you sync content or when content is created/updated.', 'rag-sync'); ?></p>
             <?php else: ?>
                 <!-- Items table -->
-                <table class="wp-list-table widefat fixed striped sync-items-table">
+                <table class="wp-list-table widefat striped sync-items-table">
                     <thead>
                         <tr>
                             <th class="column-type"><?php _e('Type', 'rag-sync'); ?></th>
