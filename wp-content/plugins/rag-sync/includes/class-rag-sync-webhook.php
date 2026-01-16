@@ -277,6 +277,10 @@ class RAG_Sync_Webhook {
             'regular_price' => $product->get_regular_price(),
             'sale_price' => $product->get_sale_price(),
             'on_sale' => $product->is_on_sale(),
+            // Currency information
+            'currency' => get_woocommerce_currency(),
+            'currency_symbol' => get_woocommerce_currency_symbol(),
+            'price_formatted' => wc_price($product->get_price()),
             'stock_status' => $product->get_stock_status(),
             'stock_quantity' => $product->get_stock_quantity(),
             'manage_stock' => $product->get_manage_stock(),

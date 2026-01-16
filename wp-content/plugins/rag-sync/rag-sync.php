@@ -151,8 +151,12 @@ final class RAG_Sync {
         ];
 
         // Add cache busting to ensure latest widget version is loaded
-        // Uses plugin version + daily timestamp to bust cache when plugin updates or daily
-        $cache_bust = RAG_SYNC_VERSION . '-' . gmdate('Ymd');
+        // Uses plugin version - cache is busted when plugin is updated
+        // Add ?refresh=1 to any page URL to force reload if needed
+        $cache_bust = RAG_SYNC_VERSION;
+        if (isset($_GET['refresh'])) {
+            $cache_bust .= '-' . time();
+        }
         $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js?v=' . $cache_bust;
         ?>
         <script>
