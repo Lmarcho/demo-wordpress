@@ -142,13 +142,18 @@ final class RAG_Sync {
         }
 
         // Essential config only - widget fetches styling from Laravel backend
+        $debug_mode = self::get_option('widget_debug', false);
         $config = [
             'tenant' => $tenant_slug,
             'apiKey' => $api_key,
             'apiUrl' => rtrim($backend_url, '/'),
+            'debug' => (bool) $debug_mode,
         ];
 
-        $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js';
+        // Add cache busting to ensure latest widget version is loaded
+        // Uses plugin version + daily timestamp to bust cache when plugin updates or daily
+        $cache_bust = RAG_SYNC_VERSION . '-' . gmdate('Ymd');
+        $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js?v=' . $cache_bust;
         ?>
         <script>
             (function() {
@@ -157,8 +162,17 @@ final class RAG_Sync {
                 script.src = '<?php echo esc_url($widget_url); ?>';
                 script.onload = function() {
                     if (typeof RAGWidget !== 'undefined') {
-                        RAGWidget.init(config);
+                        RAGWidget.init(config).then(function(instance) {
+                            console.log('[RAG Widget] Initialized successfully');
+                        }).catch(function(error) {
+                            console.error('[RAG Widget] Initialization failed:', error);
+                        });
+                    } else {
+                        console.error('[RAG Widget] RAGWidget not found after script load');
                     }
+                };
+                script.onerror = function() {
+                    console.error('[RAG Widget] Failed to load widget script from:', '<?php echo esc_url($widget_url); ?>');
                 };
                 document.body.appendChild(script);
             })();
@@ -195,8 +209,9 @@ final class RAG_Sync {
             ],
             'rag_sync_last_sync' => null,
             'rag_sync_sync_status' => 'idle',
-            // Widget enabled flag only - styling is managed in Laravel backend
+            // Widget settings - styling is managed in Laravel backend
             'rag_sync_widget_enabled' => false,
+            'rag_sync_widget_debug' => false,
         ];
 
         foreach ($defaults as $key => $value) {

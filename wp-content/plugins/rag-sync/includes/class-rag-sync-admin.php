@@ -162,6 +162,11 @@ class RAG_Sync_Admin {
             'default' => false,
         ]);
 
+        register_setting('rag_sync_settings', 'rag_sync_widget_debug', [
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
         // Widget section
         // Note: Widget styling (colors, messages, position) is configured in Laravel backend
         add_settings_section(
@@ -175,6 +180,14 @@ class RAG_Sync_Admin {
             'rag_sync_widget_enabled',
             __('Enable Widget', 'rag-sync'),
             [$this, 'render_widget_enabled_field'],
+            'rag-sync',
+            'rag_sync_widget'
+        );
+
+        add_settings_field(
+            'rag_sync_widget_debug',
+            __('Debug Mode', 'rag-sync'),
+            [$this, 'render_widget_debug_field'],
             'rag-sync',
             'rag_sync_widget'
         );
@@ -541,6 +554,26 @@ class RAG_Sync_Admin {
         </label>
         <p class="description">
             <?php _e('Requires API Key to be configured above.', 'rag-sync'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render widget debug field
+     */
+    public function render_widget_debug_field(): void {
+        $value = RAG_Sync::get_option('widget_debug', false);
+        ?>
+        <label>
+            <input type="checkbox"
+                   name="rag_sync_widget_debug"
+                   id="rag_sync_widget_debug"
+                   value="1"
+                   <?php checked($value, true); ?>>
+            <?php _e('Enable debug logging in browser console', 'rag-sync'); ?>
+        </label>
+        <p class="description">
+            <?php _e('Useful for troubleshooting widget configuration loading. Disable in production.', 'rag-sync'); ?>
         </p>
         <?php
     }
