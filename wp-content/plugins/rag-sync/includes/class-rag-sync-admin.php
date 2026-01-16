@@ -679,11 +679,22 @@ class RAG_Sync_Admin {
         // Populate tracking table with all existing content
         $counts = $this->populate_sync_tracking_table();
 
+        // Build store configuration
+        $store_config = [
+            'currency_code' => function_exists('get_woocommerce_currency') ? get_woocommerce_currency() : null,
+            'currency_symbol' => function_exists('get_woocommerce_currency_symbol') ? get_woocommerce_currency_symbol() : null,
+            'locale' => get_locale(),
+            'timezone' => wp_timezone_string(),
+            'date_format' => get_option('date_format'),
+            'site_name' => get_bloginfo('name'),
+        ];
+
         // Send sync trigger to backend
         $payload = [
             'topic' => 'sync.triggered',
             'data' => [
                 'action' => 'full_sync',
+                'store_config' => $store_config,
             ],
             'site_url' => get_site_url(),
             'timestamp' => current_time('c'),
@@ -726,11 +737,13 @@ class RAG_Sync_Admin {
 
             wp_send_json_success([
                 'message' => sprintf(
-                    __('Full sync triggered successfully! Tracked %d products, %d categories, %d coupons, %d pages.', 'rag-sync'),
+                    __('Full sync triggered successfully! Tracked %d products, %d categories, %d coupons, %d pages. Store config: %s (%s)', 'rag-sync'),
                     $counts['products'],
                     $counts['categories'],
                     $counts['coupons'],
-                    $counts['pages']
+                    $counts['pages'],
+                    $store_config['currency_code'] ?? 'N/A',
+                    $store_config['currency_symbol'] ?? 'N/A'
                 ),
             ]);
         } else {
