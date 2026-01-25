@@ -124,8 +124,9 @@ final class RAG_Sync {
     /**
      * Render chat widget on frontend
      *
-     * Widget styling (colors, messages, position) is configured in Laravel backend.
-     * This only provides essential connection config.
+     * Widget styling (colors, messages, position, voice) is configured in Laravel backend.
+     * This matches the Magento implementation approach - fetch config from Laravel and
+     * let the widget handle everything internally including voice.
      */
     public function render_chat_widget(): void {
         // Only render if widget is enabled
@@ -141,47 +142,243 @@ final class RAG_Sync {
             return;
         }
 
-        // Essential config only - widget fetches styling from Laravel backend
         $debug_mode = self::get_option('widget_debug', false);
-        $config = [
-            'tenant' => $tenant_slug,
-            'apiKey' => $api_key,
-            'apiUrl' => rtrim($backend_url, '/'),
-            'debug' => (bool) $debug_mode,
-        ];
+        $api_base_url = rtrim($backend_url, '/');
+
+        // Build config URL with tenant parameter
+        $config_url = $api_base_url . '/api/widget/config';
+        if (!empty($tenant_slug)) {
+            $config_url .= '?tenant=' . rawurlencode($tenant_slug);
+        }
+
+        // Get customer/session context (similar to Magento's approach)
+        $customer_context = $this->get_customer_context();
+        $chat_session = $this->get_chat_session();
 
         // Add cache busting to ensure latest widget version is loaded
-        // Uses plugin version - cache is busted when plugin is updated
-        // Add ?refresh=1 to any page URL to force reload if needed
         $cache_bust = RAG_SYNC_VERSION;
         if (isset($_GET['refresh'])) {
             $cache_bust .= '-' . time();
         }
-        $widget_url = rtrim($backend_url, '/') . '/widget/widget.iife.js?v=' . $cache_bust;
+        $widget_url = $api_base_url . '/widget/widget.iife.js?v=' . $cache_bust;
         ?>
         <script>
-            (function() {
-                var config = <?php echo wp_json_encode($config); ?>;
-                var script = document.createElement('script');
-                script.src = '<?php echo esc_url($widget_url); ?>';
-                script.onload = function() {
-                    if (typeof RAGWidget !== 'undefined') {
-                        RAGWidget.init(config).then(function(instance) {
-                            console.log('[RAG Widget] Initialized successfully');
-                        }).catch(function(error) {
-                            console.error('[RAG Widget] Initialization failed:', error);
+        (function() {
+            'use strict';
+
+            var scriptUrl = <?php echo wp_json_encode($widget_url); ?>;
+            var configUrl = <?php echo wp_json_encode($config_url); ?>;
+            var apiBaseUrl = <?php echo wp_json_encode($api_base_url); ?>;
+            var apiKey = <?php echo wp_json_encode($api_key); ?>;
+            var customerContext = <?php echo wp_json_encode($customer_context); ?>;
+            var chatSession = <?php echo wp_json_encode($chat_session); ?>;
+            var debug = <?php echo $debug_mode ? 'true' : 'false'; ?>;
+
+            // Load the widget script
+            var script = document.createElement('script');
+            script.src = scriptUrl;
+            script.async = true;
+            script.onload = function() {
+                if (typeof window.RAGWidget === 'undefined') {
+                    console.error('RAG Widget: RAGWidget not found after script load');
+                    return;
+                }
+
+                // Fetch config from Laravel backend (includes voice settings)
+                fetch(configUrl, {
+                    headers: apiKey ? { 'X-Api-Key': apiKey } : {}
+                })
+                    .then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('Config fetch failed: ' + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(function(config) {
+                        // Initialize widget with config from backend + WordPress context
+                        window.RAGWidget.init({
+                            ...config,
+                            apiUrl: apiBaseUrl,
+                            apiKey: apiKey,
+                            customer: customerContext,
+                            session: chatSession,
+                            skipRemoteConfig: true, // Config already fetched above
+                            debug: debug
                         });
-                    } else {
-                        console.error('[RAG Widget] RAGWidget not found after script load');
-                    }
-                };
-                script.onerror = function() {
-                    console.error('[RAG Widget] Failed to load widget script from:', '<?php echo esc_url($widget_url); ?>');
-                };
-                document.body.appendChild(script);
-            })();
+                    })
+                    .catch(function(error) {
+                        console.error('RAG Widget: Failed to initialize', error);
+                    });
+            };
+            script.onerror = function() {
+                console.error('RAG Widget: Failed to load widget script');
+            };
+            document.head.appendChild(script);
+        })();
         </script>
         <?php
+    }
+
+    /**
+     * Get customer context for the widget
+     *
+     * Similar to Magento's getCustomerContextJson() method.
+     *
+     * @return array|null
+     */
+    private function get_customer_context(): ?array {
+        // Check if WooCommerce is active for customer data
+        if (!$this->is_woocommerce_active()) {
+            return [
+                'isLoggedIn' => is_user_logged_in(),
+                'groupId' => null,
+            ];
+        }
+
+        $context = [
+            'isLoggedIn' => is_user_logged_in(),
+            'groupId' => null,
+        ];
+
+        if (is_user_logged_in()) {
+            $user = wp_get_current_user();
+            // WooCommerce customer group (if using a groups plugin)
+            $context['groupId'] = apply_filters('rag_sync_customer_group_id', null, $user);
+        }
+
+        return $context;
+    }
+
+    /**
+     * Get chat session data for the widget
+     *
+     * Similar to Magento's getChatSessionJson() method.
+     * Handles session persistence for both guests and logged-in users.
+     *
+     * @return array
+     */
+    private function get_chat_session(): array {
+        $cookie_name = 'ragsync_chat_session';
+        $is_logged_in = is_user_logged_in();
+        $guest_session_id = isset($_COOKIE[$cookie_name]) ? sanitize_text_field($_COOKIE[$cookie_name]) : null;
+
+        $session = [
+            'sessionId' => $this->get_chat_session_id(),
+            'customerId' => null,
+            'customerEmail' => null,
+            'customerName' => null,
+            'isLoggedIn' => $is_logged_in,
+            'previousGuestSessionId' => null,
+        ];
+
+        if ($is_logged_in) {
+            $user = wp_get_current_user();
+            $session['customerId'] = (int) $user->ID;
+            $session['customerEmail'] = $user->user_email;
+            $session['customerName'] = trim($user->first_name . ' ' . $user->last_name);
+            if (empty(trim($session['customerName']))) {
+                $session['customerName'] = $user->display_name;
+            }
+
+            // If logged-in user still has a guest cookie, include it for session merging
+            if (!empty($guest_session_id) && strpos($guest_session_id, 'guest_') === 0) {
+                $session['previousGuestSessionId'] = $guest_session_id;
+                // Clear the guest cookie since user is now logged in
+                $this->clear_guest_session_cookie();
+            }
+        }
+
+        return $session;
+    }
+
+    /**
+     * Get or create chat session ID
+     *
+     * For logged-in users, the session is tied to user ID.
+     * For guests, a UUID is generated and stored in a cookie.
+     *
+     * @return string
+     */
+    private function get_chat_session_id(): string {
+        $cookie_name = 'ragsync_chat_session';
+
+        // For logged-in users, use a user-based session ID
+        if (is_user_logged_in()) {
+            return 'customer_' . get_current_user_id();
+        }
+
+        // For guests, use cookie-based session ID
+        if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
+            return sanitize_text_field($_COOKIE[$cookie_name]);
+        }
+
+        // Generate new session ID for guest
+        $session_id = $this->generate_session_id();
+        $this->set_chat_session_cookie($session_id);
+
+        return $session_id;
+    }
+
+    /**
+     * Generate a new session ID (UUID v4 style)
+     *
+     * @return string
+     */
+    private function generate_session_id(): string {
+        return sprintf(
+            'guest_%s%s-%s-%s-%s-%s%s%s',
+            bin2hex(random_bytes(4)),
+            bin2hex(random_bytes(4)),
+            bin2hex(random_bytes(2)),
+            bin2hex(random_bytes(2)),
+            bin2hex(random_bytes(2)),
+            bin2hex(random_bytes(2)),
+            bin2hex(random_bytes(2)),
+            bin2hex(random_bytes(2))
+        );
+    }
+
+    /**
+     * Set chat session cookie
+     *
+     * @param string $session_id Session ID to store.
+     */
+    private function set_chat_session_cookie(string $session_id): void {
+        $cookie_name = 'ragsync_chat_session';
+        $duration = 30 * DAY_IN_SECONDS; // 30 days
+
+        setcookie(
+            $cookie_name,
+            $session_id,
+            [
+                'expires' => time() + $duration,
+                'path' => COOKIEPATH,
+                'domain' => COOKIE_DOMAIN,
+                'secure' => is_ssl(),
+                'httponly' => false, // Allow JS access for widget
+                'samesite' => 'Lax',
+            ]
+        );
+    }
+
+    /**
+     * Clear guest session cookie after merging to customer session
+     */
+    private function clear_guest_session_cookie(): void {
+        $cookie_name = 'ragsync_chat_session';
+
+        setcookie(
+            $cookie_name,
+            '',
+            [
+                'expires' => time() - 3600,
+                'path' => COOKIEPATH,
+                'domain' => COOKIE_DOMAIN,
+                'secure' => is_ssl(),
+                'httponly' => false,
+                'samesite' => 'Lax',
+            ]
+        );
     }
 
     /**
@@ -213,7 +410,7 @@ final class RAG_Sync {
             ],
             'rag_sync_last_sync' => null,
             'rag_sync_sync_status' => 'idle',
-            // Widget settings - styling is managed in Laravel backend
+            // Widget settings - styling and voice are managed in Laravel backend
             'rag_sync_widget_enabled' => false,
             'rag_sync_widget_debug' => false,
         ];

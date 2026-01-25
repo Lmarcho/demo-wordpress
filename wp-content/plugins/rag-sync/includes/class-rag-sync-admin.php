@@ -168,7 +168,7 @@ class RAG_Sync_Admin {
         ]);
 
         // Widget section
-        // Note: Widget styling (colors, messages, position) is configured in Laravel backend
+        // Note: Widget styling (colors, messages, position, voice) is configured in Laravel backend
         add_settings_section(
             'rag_sync_widget',
             __('Chat Widget', 'rag-sync'),
@@ -535,7 +535,7 @@ class RAG_Sync_Admin {
      * Render widget section description
      */
     public function render_widget_section(): void {
-        echo '<p>' . __('Enable the AI chat widget on your site. Widget styling (colors, messages, position) is configured in the Laravel backend.', 'rag-sync') . '</p>';
+        echo '<p>' . __('Enable the AI chat widget on your site. Widget styling (colors, messages, position) and voice settings are configured in the Laravel backend.', 'rag-sync') . '</p>';
     }
 
     /**
