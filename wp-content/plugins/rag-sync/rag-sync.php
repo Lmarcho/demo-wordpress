@@ -174,6 +174,25 @@ final class RAG_Sync {
             var chatSession = <?php echo wp_json_encode($chat_session); ?>;
             var debug = <?php echo $debug_mode ? 'true' : 'false'; ?>;
 
+            // Warm the cross-origin connection and prefetch the bundle early so the
+            // chat button appears quickly even on heavy pages (otherwise the async
+            // script pays a fresh DNS+TLS handshake to the API host and is deprioritized).
+            try {
+                var apiOrigin = new URL(scriptUrl, window.location.href).origin;
+                ['preconnect', 'dns-prefetch'].forEach(function (rel) {
+                    var link = document.createElement('link');
+                    link.rel = rel;
+                    link.href = apiOrigin;
+                    if (rel === 'preconnect') { link.crossOrigin = ''; }
+                    document.head.appendChild(link);
+                });
+                var preload = document.createElement('link');
+                preload.rel = 'preload';
+                preload.as = 'script';
+                preload.href = scriptUrl;
+                document.head.appendChild(preload);
+            } catch (e) { /* preconnect/preload are best-effort */ }
+
             // Load the widget script
             var script = document.createElement('script');
             script.src = scriptUrl;
