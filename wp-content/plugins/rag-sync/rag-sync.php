@@ -155,12 +155,12 @@ final class RAG_Sync {
         $customer_context = $this->get_customer_context();
         $chat_session = $this->get_chat_session();
 
-        // Add cache busting to ensure latest widget version is loaded
-        $cache_bust = RAG_SYNC_VERSION;
-        if (isset($_GET['refresh'])) {
-            $cache_bust .= '-' . time();
-        }
-        $widget_url = $api_base_url . '/widget/widget.iife.js?v=' . $cache_bust;
+        // Cache-bust tied to the deployed bundle (not the static plugin version) so
+        // a rebuilt widget loads immediately instead of a stale cached copy. Append
+        // ?refresh to any page URL to force a one-off bypass.
+        $script_base_url = $api_base_url . '/widget/widget.iife.js';
+        $cache_bust = $this->get_widget_cache_bust($script_base_url);
+        $widget_url = $script_base_url . '?v=' . rawurlencode($cache_bust);
         ?>
         <script>
         (function() {
@@ -236,6 +236,49 @@ final class RAG_Sync {
         })();
         </script>
         <?php
+    }
+
+    /**
+     * Build a cache-busting token for the widget bundle.
+     *
+     * Derived from the deployed bundle's Last-Modified/ETag rather than the static
+     * plugin version, so a rebuilt widget gets a fresh URL automatically. The probe
+     * is cached in a transient to avoid a remote request on every page render.
+     *
+     * The probe URL carries a unique query string so it can never be answered from
+     * a CDN's immutable cache of the real bundle URL; it always reaches origin and
+     * returns the true current Last-Modified/ETag. nginx ignores the query and
+     * serves the same static file.
+     */
+    private function get_widget_cache_bust(string $script_base_url): string {
+        if (isset($_GET['refresh'])) {
+            return RAG_SYNC_VERSION . '-' . time();
+        }
+
+        $cached = get_transient('rag_sync_widget_bust');
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+
+        $bust = RAG_SYNC_VERSION;
+        $probe_url = add_query_arg('probe', (string) time(), $script_base_url);
+        $response = wp_remote_head($probe_url, [
+            'timeout' => 2,
+            'headers' => ['Cache-Control' => 'no-cache'],
+        ]);
+        if (!is_wp_error($response)) {
+            $signature = wp_remote_retrieve_header($response, 'last-modified');
+            if (empty($signature)) {
+                $signature = wp_remote_retrieve_header($response, 'etag');
+            }
+            if (!empty($signature)) {
+                $bust = RAG_SYNC_VERSION . '-' . substr(md5((string) $signature), 0, 8);
+            }
+        }
+
+        set_transient('rag_sync_widget_bust', $bust, 5 * MINUTE_IN_SECONDS);
+
+        return $bust;
     }
 
     /**
