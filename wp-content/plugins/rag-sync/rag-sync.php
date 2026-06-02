@@ -1,17 +1,18 @@
 <?php
 /**
  * Plugin Name: RAG Sync
- * Plugin URI: https://github.com/your-repo/rag-sync
- * Description: Syncs WordPress/WooCommerce content to RAG backend for AI-powered chatbot
+ * Plugin URI: https://askrag.app
+ * Description: Syncs WordPress/WooCommerce content to the AskRAG backend and embeds the AI-powered chat widget.
  * Version: 1.0.0
- * Author: Your Company
- * Author URI: https://yourcompany.com
+ * Author: AskRAG
+ * Author URI: https://askrag.app
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: rag-sync
  * Domain Path: /languages
  * Requires at least: 6.0
  * Requires PHP: 8.0
+ * Update URI: https://askrag.app
  *
  * WC requires at least: 8.0
  * WC tested up to: 9.0
@@ -322,7 +323,7 @@ final class RAG_Sync {
     private function get_chat_session(): array {
         $cookie_name = 'ragsync_chat_session';
         $is_logged_in = is_user_logged_in();
-        $guest_session_id = isset($_COOKIE[$cookie_name]) ? sanitize_text_field($_COOKIE[$cookie_name]) : null;
+        $guest_session_id = isset($_COOKIE[$cookie_name]) ? sanitize_text_field(wp_unslash($_COOKIE[$cookie_name])) : null;
 
         $session = [
             'sessionId' => $this->get_chat_session_id(),
@@ -371,7 +372,7 @@ final class RAG_Sync {
 
         // For guests, use cookie-based session ID
         if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
-            return sanitize_text_field($_COOKIE[$cookie_name]);
+            return sanitize_text_field(wp_unslash($_COOKIE[$cookie_name]));
         }
 
         // Generate new session ID for guest

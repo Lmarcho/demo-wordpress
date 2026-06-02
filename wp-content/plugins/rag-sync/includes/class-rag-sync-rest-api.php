@@ -181,16 +181,17 @@ class RAG_Sync_REST_API {
 
     /**
      * Health check endpoint
+     *
+     * Public (no auth) so the backend can probe availability. Intentionally does
+     * not expose WordPress/PHP/WooCommerce versions or the site URL to avoid
+     * leaking environment details to unauthenticated callers. Authenticated
+     * callers get full details via the live data endpoints.
      */
     public function health_check(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response([
             'success' => true,
             'status' => 'healthy',
             'woocommerce' => class_exists('WooCommerce'),
-            'woocommerce_version' => defined('WC_VERSION') ? WC_VERSION : null,
-            'wordpress_version' => get_bloginfo('version'),
-            'php_version' => phpversion(),
-            'site_url' => get_site_url(),
             'timestamp' => current_time('c'),
         ]);
     }

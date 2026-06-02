@@ -247,21 +247,21 @@ class RAG_Sync_Admin {
 
             <div class="rag-sync-status-bar">
                 <div class="status-item">
-                    <span class="status-label"><?php _e('Status:', 'rag-sync'); ?></span>
+                    <span class="status-label"><?php esc_html_e('Status:', 'rag-sync'); ?></span>
                     <span class="status-value status-<?php echo esc_attr($sync_status); ?>" id="rag-sync-status">
                         <?php echo esc_html(ucfirst($sync_status)); ?>
                     </span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label"><?php _e('Last Sync:', 'rag-sync'); ?></span>
+                    <span class="status-label"><?php esc_html_e('Last Sync:', 'rag-sync'); ?></span>
                     <span class="status-value" id="rag-sync-last-sync">
-                        <?php echo $last_sync ? esc_html(human_time_diff(strtotime($last_sync)) . ' ago') : __('Never', 'rag-sync'); ?>
+                        <?php echo $last_sync ? esc_html(human_time_diff(strtotime($last_sync)) . ' ago') : esc_html__('Never', 'rag-sync'); ?>
                     </span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label"><?php _e('WooCommerce:', 'rag-sync'); ?></span>
+                    <span class="status-label"><?php esc_html_e('WooCommerce:', 'rag-sync'); ?></span>
                     <span class="status-value <?php echo $is_woocommerce ? 'status-active' : 'status-inactive'; ?>">
-                        <?php echo $is_woocommerce ? __('Active', 'rag-sync') : __('Not Installed', 'rag-sync'); ?>
+                        <?php echo $is_woocommerce ? esc_html__('Active', 'rag-sync') : esc_html__('Not Installed', 'rag-sync'); ?>
                     </span>
                 </div>
             </div>
@@ -275,15 +275,15 @@ class RAG_Sync_Admin {
             </form>
 
             <div class="rag-sync-actions">
-                <h2><?php _e('Actions', 'rag-sync'); ?></h2>
+                <h2><?php esc_html_e('Actions', 'rag-sync'); ?></h2>
 
                 <div class="action-buttons">
                     <button type="button" class="button button-secondary" id="rag-sync-test-connection">
-                        <?php _e('Test Connection', 'rag-sync'); ?>
+                        <?php esc_html_e('Test Connection', 'rag-sync'); ?>
                     </button>
 
                     <button type="button" class="button button-primary" id="rag-sync-full-sync">
-                        <?php _e('Trigger Full Sync', 'rag-sync'); ?>
+                        <?php esc_html_e('Trigger Full Sync', 'rag-sync'); ?>
                     </button>
                 </div>
 
@@ -296,35 +296,35 @@ class RAG_Sync_Admin {
             $is_configured = $webhook_endpoint && $has_webhook_secret;
             ?>
             <div class="rag-sync-webhook-info">
-                <h2><?php _e('Webhook Status', 'rag-sync'); ?></h2>
-                <p><?php _e('Real-time updates will be sent to your RAG backend when content changes.', 'rag-sync'); ?></p>
+                <h2><?php esc_html_e('Webhook Status', 'rag-sync'); ?></h2>
+                <p><?php esc_html_e('Real-time updates will be sent to your RAG backend when content changes.', 'rag-sync'); ?></p>
 
                 <table class="form-table">
                     <tr>
-                        <th><?php _e('Configuration Status', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Configuration Status', 'rag-sync'); ?></th>
                         <td>
                             <?php if ($is_configured): ?>
-                                <span class="status-value status-active"><?php _e('Ready', 'rag-sync'); ?></span>
-                                <span class="description"><?php _e('Use "Test Connection" to verify the webhook secret.', 'rag-sync'); ?></span>
+                                <span class="status-value status-active"><?php esc_html_e('Ready', 'rag-sync'); ?></span>
+                                <span class="description"><?php esc_html_e('Use "Test Connection" to verify the webhook secret.', 'rag-sync'); ?></span>
                             <?php else: ?>
-                                <span class="status-value status-error"><?php _e('Incomplete', 'rag-sync'); ?></span>
+                                <span class="status-value status-error"><?php esc_html_e('Incomplete', 'rag-sync'); ?></span>
                                 <?php if (!$webhook_endpoint): ?>
-                                    <p class="description"><?php _e('Missing: Webhook Endpoint', 'rag-sync'); ?></p>
+                                    <p class="description"><?php esc_html_e('Missing: Webhook Endpoint', 'rag-sync'); ?></p>
                                 <?php endif; ?>
                                 <?php if (!$has_webhook_secret): ?>
-                                    <p class="description"><?php _e('Missing: Webhook Secret', 'rag-sync'); ?></p>
+                                    <p class="description"><?php esc_html_e('Missing: Webhook Secret', 'rag-sync'); ?></p>
                                 <?php endif; ?>
                             <?php endif; ?>
                         </td>
                     </tr>
                     <tr>
-                        <th><?php _e('WordPress Site URL', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('WordPress Site URL', 'rag-sync'); ?></th>
                         <td>
                             <code id="site-url"><?php echo esc_url(get_site_url()); ?></code>
                             <button type="button" class="button button-small copy-btn" data-target="site-url">
-                                <?php _e('Copy', 'rag-sync'); ?>
+                                <?php esc_html_e('Copy', 'rag-sync'); ?>
                             </button>
-                            <p class="description"><?php _e('Enter this URL as the WooCommerce Store URL in your RAG backend.', 'rag-sync'); ?></p>
+                            <p class="description"><?php esc_html_e('Enter this URL as the WooCommerce Store URL in your RAG backend.', 'rag-sync'); ?></p>
                         </td>
                     </tr>
                 </table>
@@ -333,23 +333,23 @@ class RAG_Sync_Admin {
             <?php $this->render_sync_status_table(); ?>
 
             <div class="rag-sync-debug">
-                <h2><?php _e('Debug Information', 'rag-sync'); ?></h2>
+                <h2><?php esc_html_e('Debug Information', 'rag-sync'); ?></h2>
                 <table class="form-table">
                     <tr>
-                        <th><?php _e('WordPress Version', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('WordPress Version', 'rag-sync'); ?></th>
                         <td><?php echo esc_html(get_bloginfo('version')); ?></td>
                     </tr>
                     <tr>
-                        <th><?php _e('PHP Version', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('PHP Version', 'rag-sync'); ?></th>
                         <td><?php echo esc_html(phpversion()); ?></td>
                     </tr>
                     <tr>
-                        <th><?php _e('Site URL', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Site URL', 'rag-sync'); ?></th>
                         <td><?php echo esc_url(get_site_url()); ?></td>
                     </tr>
                     <?php if ($is_woocommerce): ?>
                     <tr>
-                        <th><?php _e('WooCommerce Version', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('WooCommerce Version', 'rag-sync'); ?></th>
                         <td><?php echo esc_html(WC()->version); ?></td>
                     </tr>
                     <?php endif; ?>
@@ -363,14 +363,14 @@ class RAG_Sync_Admin {
      * Render connection section description
      */
     public function render_connection_section(): void {
-        echo '<p>' . __('Configure the connection to your RAG backend server.', 'rag-sync') . '</p>';
+        echo '<p>' . esc_html__('Configure the connection to your RAG backend server.', 'rag-sync') . '</p>';
     }
 
     /**
      * Render content section description
      */
     public function render_content_section(): void {
-        echo '<p>' . __('Select which content types to sync to the RAG backend.', 'rag-sync') . '</p>';
+        echo '<p>' . esc_html__('Select which content types to sync to the RAG backend.', 'rag-sync') . '</p>';
     }
 
     /**
@@ -386,7 +386,7 @@ class RAG_Sync_Admin {
                class="regular-text"
                placeholder="https://your-rag-backend.com">
         <p class="description">
-            <?php _e('The URL of your RAG backend server (e.g., https://api.yoursite.com)', 'rag-sync'); ?>
+            <?php esc_html_e('The URL of your RAG backend server (e.g., https://api.yoursite.com)', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -404,7 +404,7 @@ class RAG_Sync_Admin {
                class="regular-text"
                placeholder="my-store">
         <p class="description">
-            <?php _e('Your tenant slug in the RAG backend (used for webhook URL)', 'rag-sync'); ?>
+            <?php esc_html_e('Your tenant slug in the RAG backend (used for webhook URL)', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -422,7 +422,7 @@ class RAG_Sync_Admin {
                class="regular-text"
                placeholder="wgt_xxxxx">
         <p class="description">
-            <?php _e('Widget API key from your RAG backend (starts with wgt_)', 'rag-sync'); ?>
+            <?php esc_html_e('Widget API key from your RAG backend (starts with wgt_)', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -440,7 +440,7 @@ class RAG_Sync_Admin {
                class="regular-text"
                placeholder="whsec_wc_xxxxx">
         <p class="description">
-            <?php _e('Copy the Webhook Secret from your RAG backend (Settings → WooCommerce Integration)', 'rag-sync'); ?>
+            <?php esc_html_e('Copy the Webhook Secret from your RAG backend (Settings → WooCommerce Integration)', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -465,11 +465,11 @@ class RAG_Sync_Admin {
                placeholder="<?php echo esc_attr($suggested); ?>">
         <?php if ($suggested && $suggested !== $value): ?>
         <button type="button" class="button button-small" id="rag-sync-auto-endpoint" data-endpoint="<?php echo esc_attr($suggested); ?>">
-            <?php _e('Use Default', 'rag-sync'); ?>
+            <?php esc_html_e('Use Default', 'rag-sync'); ?>
         </button>
         <?php endif; ?>
         <p class="description">
-            <?php _e('The Laravel endpoint URL where webhooks will be sent. Copy from RAG backend settings.', 'rag-sync'); ?>
+            <?php esc_html_e('The Laravel endpoint URL where webhooks will be sent. Copy from RAG backend settings.', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -486,7 +486,7 @@ class RAG_Sync_Admin {
                    id="rag_sync_enabled"
                    value="1"
                    <?php checked($value, true); ?>>
-            <?php _e('Enable automatic sync when content is created or updated', 'rag-sync'); ?>
+            <?php esc_html_e('Enable automatic sync when content is created or updated', 'rag-sync'); ?>
         </label>
         <?php
     }
@@ -525,7 +525,7 @@ class RAG_Sync_Admin {
         if (!$is_woocommerce) {
             ?>
             <p class="description" style="margin-top: 10px;">
-                <?php _e('Install WooCommerce to sync products, categories, and coupons.', 'rag-sync'); ?>
+                <?php esc_html_e('Install WooCommerce to sync products, categories, and coupons.', 'rag-sync'); ?>
             </p>
             <?php
         }
@@ -535,7 +535,7 @@ class RAG_Sync_Admin {
      * Render widget section description
      */
     public function render_widget_section(): void {
-        echo '<p>' . __('Enable the AI chat widget on your site. Widget styling (colors, messages, position) and voice settings are configured in the Laravel backend.', 'rag-sync') . '</p>';
+        echo '<p>' . esc_html__('Enable the AI chat widget on your site. Widget styling (colors, messages, position) and voice settings are configured in the Laravel backend.', 'rag-sync') . '</p>';
     }
 
     /**
@@ -550,10 +550,10 @@ class RAG_Sync_Admin {
                    id="rag_sync_widget_enabled"
                    value="1"
                    <?php checked($value, true); ?>>
-            <?php _e('Show chat widget on frontend', 'rag-sync'); ?>
+            <?php esc_html_e('Show chat widget on frontend', 'rag-sync'); ?>
         </label>
         <p class="description">
-            <?php _e('Requires API Key to be configured above.', 'rag-sync'); ?>
+            <?php esc_html_e('Requires API Key to be configured above.', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -570,10 +570,10 @@ class RAG_Sync_Admin {
                    id="rag_sync_widget_debug"
                    value="1"
                    <?php checked($value, true); ?>>
-            <?php _e('Enable debug logging in browser console', 'rag-sync'); ?>
+            <?php esc_html_e('Enable debug logging in browser console', 'rag-sync'); ?>
         </label>
         <p class="description">
-            <?php _e('Useful for troubleshooting widget configuration loading. Disable in production.', 'rag-sync'); ?>
+            <?php esc_html_e('Useful for troubleshooting widget configuration loading. Disable in production.', 'rag-sync'); ?>
         </p>
         <?php
     }
@@ -875,10 +875,10 @@ class RAG_Sync_Admin {
      */
     private function render_sync_status_table(): void {
         // Get filter parameters
-        $type_filter = isset($_GET['sync_type']) ? sanitize_text_field($_GET['sync_type']) : '';
-        $status_filter = isset($_GET['sync_status']) ? sanitize_text_field($_GET['sync_status']) : '';
-        $search = isset($_GET['sync_search']) ? sanitize_text_field($_GET['sync_search']) : '';
-        $page = isset($_GET['sync_page']) ? max(1, intval($_GET['sync_page'])) : 1;
+        $type_filter = isset($_GET['sync_type']) ? sanitize_text_field(wp_unslash($_GET['sync_type'])) : '';
+        $status_filter = isset($_GET['sync_status']) ? sanitize_text_field(wp_unslash($_GET['sync_status'])) : '';
+        $search = isset($_GET['sync_search']) ? sanitize_text_field(wp_unslash($_GET['sync_search'])) : '';
+        $page = isset($_GET['sync_page']) ? max(1, intval(wp_unslash($_GET['sync_page']))) : 1;
 
         // Get items
         $result = RAG_Sync_DB::get_items([
@@ -897,25 +897,25 @@ class RAG_Sync_Admin {
         $stats = RAG_Sync_DB::get_stats();
         ?>
         <div class="rag-sync-items">
-            <h2><?php _e('Sync Status', 'rag-sync'); ?></h2>
+            <h2><?php esc_html_e('Sync Status', 'rag-sync'); ?></h2>
 
             <!-- Stats summary -->
             <div class="sync-stats-summary">
                 <div class="stat-box">
                     <span class="stat-number"><?php echo esc_html($stats['total']); ?></span>
-                    <span class="stat-label"><?php _e('Total Items', 'rag-sync'); ?></span>
+                    <span class="stat-label"><?php esc_html_e('Total Items', 'rag-sync'); ?></span>
                 </div>
                 <div class="stat-box stat-synced">
                     <span class="stat-number"><?php echo esc_html($stats['by_status']['synced'] ?? 0); ?></span>
-                    <span class="stat-label"><?php _e('Synced', 'rag-sync'); ?></span>
+                    <span class="stat-label"><?php esc_html_e('Synced', 'rag-sync'); ?></span>
                 </div>
                 <div class="stat-box stat-pending">
                     <span class="stat-number"><?php echo esc_html($stats['by_status']['pending'] ?? 0); ?></span>
-                    <span class="stat-label"><?php _e('Pending', 'rag-sync'); ?></span>
+                    <span class="stat-label"><?php esc_html_e('Pending', 'rag-sync'); ?></span>
                 </div>
                 <div class="stat-box stat-failed">
                     <span class="stat-number"><?php echo esc_html($stats['by_status']['failed'] ?? 0); ?></span>
-                    <span class="stat-label"><?php _e('Failed', 'rag-sync'); ?></span>
+                    <span class="stat-label"><?php esc_html_e('Failed', 'rag-sync'); ?></span>
                 </div>
             </div>
 
@@ -925,42 +925,42 @@ class RAG_Sync_Admin {
                     <input type="hidden" name="page" value="rag-sync">
 
                     <select name="sync_type">
-                        <option value=""><?php _e('All Types', 'rag-sync'); ?></option>
-                        <option value="product" <?php selected($type_filter, 'product'); ?>><?php _e('Products', 'rag-sync'); ?></option>
-                        <option value="category" <?php selected($type_filter, 'category'); ?>><?php _e('Categories', 'rag-sync'); ?></option>
-                        <option value="coupon" <?php selected($type_filter, 'coupon'); ?>><?php _e('Coupons', 'rag-sync'); ?></option>
-                        <option value="page" <?php selected($type_filter, 'page'); ?>><?php _e('Pages', 'rag-sync'); ?></option>
+                        <option value=""><?php esc_html_e('All Types', 'rag-sync'); ?></option>
+                        <option value="product" <?php selected($type_filter, 'product'); ?>><?php esc_html_e('Products', 'rag-sync'); ?></option>
+                        <option value="category" <?php selected($type_filter, 'category'); ?>><?php esc_html_e('Categories', 'rag-sync'); ?></option>
+                        <option value="coupon" <?php selected($type_filter, 'coupon'); ?>><?php esc_html_e('Coupons', 'rag-sync'); ?></option>
+                        <option value="page" <?php selected($type_filter, 'page'); ?>><?php esc_html_e('Pages', 'rag-sync'); ?></option>
                     </select>
 
                     <select name="sync_status">
-                        <option value=""><?php _e('All Statuses', 'rag-sync'); ?></option>
-                        <option value="synced" <?php selected($status_filter, 'synced'); ?>><?php _e('Synced', 'rag-sync'); ?></option>
-                        <option value="pending" <?php selected($status_filter, 'pending'); ?>><?php _e('Pending', 'rag-sync'); ?></option>
-                        <option value="failed" <?php selected($status_filter, 'failed'); ?>><?php _e('Failed', 'rag-sync'); ?></option>
-                        <option value="deleted" <?php selected($status_filter, 'deleted'); ?>><?php _e('Deleted', 'rag-sync'); ?></option>
+                        <option value=""><?php esc_html_e('All Statuses', 'rag-sync'); ?></option>
+                        <option value="synced" <?php selected($status_filter, 'synced'); ?>><?php esc_html_e('Synced', 'rag-sync'); ?></option>
+                        <option value="pending" <?php selected($status_filter, 'pending'); ?>><?php esc_html_e('Pending', 'rag-sync'); ?></option>
+                        <option value="failed" <?php selected($status_filter, 'failed'); ?>><?php esc_html_e('Failed', 'rag-sync'); ?></option>
+                        <option value="deleted" <?php selected($status_filter, 'deleted'); ?>><?php esc_html_e('Deleted', 'rag-sync'); ?></option>
                     </select>
 
-                    <input type="text" name="sync_search" value="<?php echo esc_attr($search); ?>" placeholder="<?php _e('Search by name or SKU...', 'rag-sync'); ?>">
+                    <input type="text" name="sync_search" value="<?php echo esc_attr($search); ?>" placeholder="<?php esc_attr_e('Search by name or SKU...', 'rag-sync'); ?>">
 
-                    <button type="submit" class="button"><?php _e('Filter', 'rag-sync'); ?></button>
-                    <a href="<?php echo admin_url('options-general.php?page=rag-sync'); ?>" class="button"><?php _e('Reset', 'rag-sync'); ?></a>
+                    <button type="submit" class="button"><?php esc_html_e('Filter', 'rag-sync'); ?></button>
+                    <a href="<?php echo esc_url(admin_url('options-general.php?page=rag-sync')); ?>" class="button"><?php esc_html_e('Reset', 'rag-sync'); ?></a>
                 </form>
             </div>
 
             <?php if (empty($items)): ?>
-                <p class="no-items"><?php _e('No items found. Items will appear here when you sync content or when content is created/updated.', 'rag-sync'); ?></p>
+                <p class="no-items"><?php esc_html_e('No items found. Items will appear here when you sync content or when content is created/updated.', 'rag-sync'); ?></p>
             <?php else: ?>
                 <!-- Items table -->
                 <table class="wp-list-table widefat striped sync-items-table">
                     <thead>
                         <tr>
-                            <th class="column-type"><?php _e('Type', 'rag-sync'); ?></th>
-                            <th class="column-name"><?php _e('Name', 'rag-sync'); ?></th>
-                            <th class="column-sku"><?php _e('SKU', 'rag-sync'); ?></th>
-                            <th class="column-status"><?php _e('Status', 'rag-sync'); ?></th>
-                            <th class="column-webhook"><?php _e('Last Webhook', 'rag-sync'); ?></th>
-                            <th class="column-synced"><?php _e('Last Synced', 'rag-sync'); ?></th>
-                            <th class="column-actions"><?php _e('Actions', 'rag-sync'); ?></th>
+                            <th class="column-type"><?php esc_html_e('Type', 'rag-sync'); ?></th>
+                            <th class="column-name"><?php esc_html_e('Name', 'rag-sync'); ?></th>
+                            <th class="column-sku"><?php esc_html_e('SKU', 'rag-sync'); ?></th>
+                            <th class="column-status"><?php esc_html_e('Status', 'rag-sync'); ?></th>
+                            <th class="column-webhook"><?php esc_html_e('Last Webhook', 'rag-sync'); ?></th>
+                            <th class="column-synced"><?php esc_html_e('Last Synced', 'rag-sync'); ?></th>
+                            <th class="column-actions"><?php esc_html_e('Actions', 'rag-sync'); ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1001,9 +1001,9 @@ class RAG_Sync_Admin {
                                 <td class="column-synced">
                                     <?php if ($item->last_synced): ?>
                                         <?php echo esc_html(human_time_diff(strtotime($item->last_synced)) . ' ago'); ?>
-                                        <br><small><?php echo esc_html($item->sync_count); ?> <?php _e('syncs', 'rag-sync'); ?></small>
+                                        <br><small><?php echo esc_html($item->sync_count); ?> <?php esc_html_e('syncs', 'rag-sync'); ?></small>
                                     <?php else: ?>
-                                        <span class="na"><?php _e('Never', 'rag-sync'); ?></span>
+                                        <span class="na"><?php esc_html_e('Never', 'rag-sync'); ?></span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="column-actions">
@@ -1011,7 +1011,7 @@ class RAG_Sync_Admin {
                                             class="button button-small sync-item-btn"
                                             data-type="<?php echo esc_attr($item->item_type); ?>"
                                             data-id="<?php echo esc_attr($item->item_id); ?>">
-                                        <?php _e('Sync Now', 'rag-sync'); ?>
+                                        <?php esc_html_e('Sync Now', 'rag-sync'); ?>
                                     </button>
                                 </td>
                             </tr>
@@ -1034,7 +1034,7 @@ class RAG_Sync_Admin {
                             $url = add_query_arg('sync_page', $i, $base_url);
                             $class = $i === $page ? 'button button-primary' : 'button';
                         ?>
-                            <a href="<?php echo esc_url($url); ?>" class="<?php echo $class; ?>"><?php echo $i; ?></a>
+                            <a href="<?php echo esc_url($url); ?>" class="<?php echo esc_attr($class); ?>"><?php echo esc_html($i); ?></a>
                         <?php endfor; ?>
                     </div>
                 <?php endif; ?>
