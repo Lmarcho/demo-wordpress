@@ -874,11 +874,13 @@ class RAG_Sync_Admin {
      * Render sync status table
      */
     private function render_sync_status_table(): void {
-        // Get filter parameters
+        // Get filter parameters. These drive a read-only admin list view and
+        // change no state, so a nonce is not required. phpcs:disable WordPress.Security.NonceVerification.Recommended
         $type_filter = isset($_GET['sync_type']) ? sanitize_text_field(wp_unslash($_GET['sync_type'])) : '';
         $status_filter = isset($_GET['sync_status']) ? sanitize_text_field(wp_unslash($_GET['sync_status'])) : '';
         $search = isset($_GET['sync_search']) ? sanitize_text_field(wp_unslash($_GET['sync_search'])) : '';
         $page = isset($_GET['sync_page']) ? max(1, intval(wp_unslash($_GET['sync_page']))) : 1;
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
         // Get items
         $result = RAG_Sync_DB::get_items([

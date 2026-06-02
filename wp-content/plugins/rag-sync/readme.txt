@@ -27,6 +27,22 @@ The widget bundle is loaded with a cache-busting token derived from the deployed
 * PHP 8.0 or higher.
 * WooCommerce 8.0+ is optional; product/category/coupon features activate only when WooCommerce is present.
 
+== External Services ==
+
+This plugin connects to the AskRAG backend that you configure (the "Backend URL" in settings, e.g. https://askrag.app). It relies on this service to store and index your content and to power the AI chat widget. The plugin does not function without it.
+
+What is sent and when:
+
+* When sync is enabled and content changes (or you trigger a full sync), the plugin sends your posts, pages, products, categories, and coupons — including titles, descriptions, prices, stock, and SKUs — to your configured Backend URL via signed webhooks.
+* When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages, plus minimal session/customer context (a generated session ID, and for logged-in users their WooCommerce/WordPress identifiers) to that backend to generate answers.
+* A lightweight request is made from the server to the Backend URL to detect the current widget version for cache-busting.
+
+No data is sent to any party other than the Backend URL you configure.
+
+Service provider (default AskRAG): https://askrag.app
+Terms of Service: https://askrag.app/terms
+Privacy Policy: https://askrag.app/privacy
+
 == Installation ==
 
 1. Upload the `rag-sync` folder to `/wp-content/plugins/`, or install the ZIP via Plugins → Add New → Upload Plugin.

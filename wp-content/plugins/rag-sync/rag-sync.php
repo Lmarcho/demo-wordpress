@@ -12,7 +12,6 @@
  * Domain Path: /languages
  * Requires at least: 6.0
  * Requires PHP: 8.0
- * Update URI: https://askrag.app
  *
  * WC requires at least: 8.0
  * WC tested up to: 9.0
@@ -123,11 +122,11 @@ final class RAG_Sync {
     }
 
     /**
-     * Render chat widget on frontend
+     * Enqueue the chat widget loader on the frontend.
      *
-     * Widget styling (colors, messages, position, voice) is configured in Laravel backend.
-     * This matches the Magento implementation approach - fetch config from Laravel and
-     * let the widget handle everything internally including voice.
+     * Widget styling (colors, messages, position, voice) is configured in the
+     * AskRAG backend. A local loader script (enqueued, not injected inline)
+     * loads the remote widget bundle and initializes it with the tenant config.
      */
     public function render_chat_widget(): void {
         // Only render if widget is enabled
@@ -143,7 +142,6 @@ final class RAG_Sync {
             return;
         }
 
-        $debug_mode = self::get_option('widget_debug', false);
         $api_base_url = rtrim($backend_url, '/');
 
         // Build config URL with tenant parameter
@@ -152,91 +150,30 @@ final class RAG_Sync {
             $config_url .= '?tenant=' . rawurlencode($tenant_slug);
         }
 
-        // Get customer/session context (similar to Magento's approach)
-        $customer_context = $this->get_customer_context();
-        $chat_session = $this->get_chat_session();
-
         // Cache-bust tied to the deployed bundle (not the static plugin version) so
         // a rebuilt widget loads immediately instead of a stale cached copy. Append
         // ?refresh to any page URL to force a one-off bypass.
         $script_base_url = $api_base_url . '/widget/widget.iife.js';
         $cache_bust = $this->get_widget_cache_bust($script_base_url);
         $widget_url = $script_base_url . '?v=' . rawurlencode($cache_bust);
-        ?>
-        <script>
-        (function() {
-            'use strict';
 
-            var scriptUrl = <?php echo wp_json_encode($widget_url); ?>;
-            var configUrl = <?php echo wp_json_encode($config_url); ?>;
-            var apiBaseUrl = <?php echo wp_json_encode($api_base_url); ?>;
-            var apiKey = <?php echo wp_json_encode($api_key); ?>;
-            var customerContext = <?php echo wp_json_encode($customer_context); ?>;
-            var chatSession = <?php echo wp_json_encode($chat_session); ?>;
-            var debug = <?php echo $debug_mode ? 'true' : 'false'; ?>;
+        wp_enqueue_script(
+            'rag-sync-widget-loader',
+            RAG_SYNC_PLUGIN_URL . 'assets/js/widget-loader.js',
+            [],
+            RAG_SYNC_VERSION,
+            true
+        );
 
-            // Warm the cross-origin connection and prefetch the bundle early so the
-            // chat button appears quickly even on heavy pages (otherwise the async
-            // script pays a fresh DNS+TLS handshake to the API host and is deprioritized).
-            try {
-                var apiOrigin = new URL(scriptUrl, window.location.href).origin;
-                ['preconnect', 'dns-prefetch'].forEach(function (rel) {
-                    var link = document.createElement('link');
-                    link.rel = rel;
-                    link.href = apiOrigin;
-                    if (rel === 'preconnect') { link.crossOrigin = ''; }
-                    document.head.appendChild(link);
-                });
-                var preload = document.createElement('link');
-                preload.rel = 'preload';
-                preload.as = 'script';
-                preload.href = scriptUrl;
-                document.head.appendChild(preload);
-            } catch (e) { /* preconnect/preload are best-effort */ }
-
-            // Load the widget script
-            var script = document.createElement('script');
-            script.src = scriptUrl;
-            script.async = true;
-            script.onload = function() {
-                if (typeof window.RAGWidget === 'undefined') {
-                    console.error('RAG Widget: RAGWidget not found after script load');
-                    return;
-                }
-
-                // Fetch config from Laravel backend (includes voice settings)
-                fetch(configUrl, {
-                    headers: apiKey ? { 'X-Api-Key': apiKey } : {}
-                })
-                    .then(function(response) {
-                        if (!response.ok) {
-                            throw new Error('Config fetch failed: ' + response.status);
-                        }
-                        return response.json();
-                    })
-                    .then(function(config) {
-                        // Initialize widget with config from backend + WordPress context
-                        window.RAGWidget.init({
-                            ...config,
-                            apiUrl: apiBaseUrl,
-                            apiKey: apiKey,
-                            customer: customerContext,
-                            session: chatSession,
-                            skipRemoteConfig: true, // Config already fetched above
-                            debug: debug
-                        });
-                    })
-                    .catch(function(error) {
-                        console.error('RAG Widget: Failed to initialize', error);
-                    });
-            };
-            script.onerror = function() {
-                console.error('RAG Widget: Failed to load widget script');
-            };
-            document.head.appendChild(script);
-        })();
-        </script>
-        <?php
+        wp_localize_script('rag-sync-widget-loader', 'RAGSyncConfig', [
+            'scriptUrl' => $widget_url,
+            'configUrl' => $config_url,
+            'apiBaseUrl' => $api_base_url,
+            'apiKey' => $api_key,
+            'customer' => $this->get_customer_context(),
+            'session' => $this->get_chat_session(),
+            'debug' => (bool) self::get_option('widget_debug', false),
+        ]);
     }
 
     /**
