@@ -23,6 +23,8 @@ class RAG_Sync_Admin {
         add_action('wp_ajax_rag_sync_test_connection', [$this, 'ajax_test_connection']);
         add_action('wp_ajax_rag_sync_trigger_full_sync', [$this, 'ajax_trigger_full_sync']);
         add_action('wp_ajax_rag_sync_get_status', [$this, 'ajax_get_status']);
+        add_action('admin_post_rag_sync_mcp_create_client', [$this, 'handle_mcp_create_client']);
+        add_action('admin_post_rag_sync_mcp_revoke_client', [$this, 'handle_mcp_revoke_client']);
     }
 
     /**
@@ -191,6 +193,67 @@ class RAG_Sync_Admin {
             'rag-sync',
             'rag_sync_widget'
         );
+
+        // MCP settings
+        register_setting('rag_sync_settings', 'rag_sync_mcp_enabled', [
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_mcp_public_coupon_codes', [
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => '',
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_mcp_assertion_lifetime', [
+            'type' => 'integer',
+            'sanitize_callback' => 'absint',
+            'default' => 300,
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_mcp_max_skus', [
+            'type' => 'integer',
+            'sanitize_callback' => 'absint',
+            'default' => 20,
+        ]);
+
+        register_setting('rag_sync_settings', 'rag_sync_mcp_max_results', [
+            'type' => 'integer',
+            'sanitize_callback' => 'absint',
+            'default' => 10,
+        ]);
+
+        add_settings_section(
+            'rag_sync_mcp',
+            __('MCP Server', 'rag-sync'),
+            [$this, 'render_mcp_section'],
+            'rag-sync'
+        );
+
+        add_settings_field(
+            'rag_sync_mcp_enabled',
+            __('Enable MCP', 'rag-sync'),
+            [$this, 'render_mcp_enabled_field'],
+            'rag-sync',
+            'rag_sync_mcp'
+        );
+
+        add_settings_field(
+            'rag_sync_mcp_public_coupon_codes',
+            __('Public Coupon Codes', 'rag-sync'),
+            [$this, 'render_mcp_public_coupon_codes_field'],
+            'rag-sync',
+            'rag_sync_mcp'
+        );
+
+        add_settings_field(
+            'rag_sync_mcp_limits',
+            __('Tool Limits', 'rag-sync'),
+            [$this, 'render_mcp_limits_field'],
+            'rag-sync',
+            'rag_sync_mcp'
+        );
     }
 
     /**
@@ -287,8 +350,10 @@ class RAG_Sync_Admin {
                     </button>
                 </div>
 
-                <div id="rag-sync-message" class="rag-sync-message" style="display: none;"></div>
+            <div id="rag-sync-message" class="rag-sync-message" style="display: none;"></div>
             </div>
+
+            <?php $this->render_mcp_clients_panel(); ?>
 
             <?php
             $webhook_endpoint = RAG_Sync::get_option('webhook_endpoint', '');
@@ -576,6 +641,178 @@ class RAG_Sync_Admin {
             <?php esc_html_e('Useful for troubleshooting widget configuration loading. Disable in production.', 'rag-sync'); ?>
         </p>
         <?php
+    }
+
+    /**
+     * Render MCP section description.
+     */
+    public function render_mcp_section(): void {
+        ?>
+        <p><?php esc_html_e('Expose read-only WordPress and WooCommerce tools to your AskRAG backend over MCP.', 'rag-sync'); ?></p>
+        <p>
+            <?php esc_html_e('Fallback endpoint:', 'rag-sync'); ?>
+            <code><?php echo esc_url(RAG_Sync_MCP::fallback_endpoint()); ?></code>
+        </p>
+        <p>
+            <?php esc_html_e('Official adapter endpoint, when the WordPress MCP Adapter is installed:', 'rag-sync'); ?>
+            <code><?php echo esc_url(RAG_Sync_MCP::official_endpoint()); ?></code>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render MCP enabled field.
+     */
+    public function render_mcp_enabled_field(): void {
+        $value = RAG_Sync::get_option('mcp_enabled', false);
+        ?>
+        <label>
+            <input type="checkbox"
+                   name="rag_sync_mcp_enabled"
+                   value="1"
+                   <?php checked($value, true); ?>>
+            <?php esc_html_e('Enable MCP server endpoints', 'rag-sync'); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * Render public coupon allow-list.
+     */
+    public function render_mcp_public_coupon_codes_field(): void {
+        $value = RAG_Sync::get_option('mcp_public_coupon_codes', '');
+        ?>
+        <input type="text"
+               name="rag_sync_mcp_public_coupon_codes"
+               value="<?php echo esc_attr($value); ?>"
+               class="regular-text"
+               placeholder="WELCOME10, FREESHIP">
+        <p class="description"><?php esc_html_e('Only these coupon codes may be disclosed through MCP promotion tools. Leave blank to hide all codes.', 'rag-sync'); ?></p>
+        <?php
+    }
+
+    /**
+     * Render MCP limits.
+     */
+    public function render_mcp_limits_field(): void {
+        ?>
+        <label>
+            <?php esc_html_e('Max SKUs:', 'rag-sync'); ?>
+            <input type="number" min="1" max="100" name="rag_sync_mcp_max_skus" value="<?php echo esc_attr((string) RAG_Sync::get_option('mcp_max_skus', 20)); ?>" class="small-text">
+        </label>
+        <label style="margin-left: 12px;">
+            <?php esc_html_e('Max results:', 'rag-sync'); ?>
+            <input type="number" min="1" max="100" name="rag_sync_mcp_max_results" value="<?php echo esc_attr((string) RAG_Sync::get_option('mcp_max_results', 10)); ?>" class="small-text">
+        </label>
+        <label style="margin-left: 12px;">
+            <?php esc_html_e('Assertion lifetime:', 'rag-sync'); ?>
+            <input type="number" min="60" max="3600" name="rag_sync_mcp_assertion_lifetime" value="<?php echo esc_attr((string) RAG_Sync::get_option('mcp_assertion_lifetime', 300)); ?>" class="small-text">
+            <?php esc_html_e('seconds', 'rag-sync'); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * Render MCP clients panel.
+     */
+    private function render_mcp_clients_panel(): void {
+        if (!class_exists('RAG_Sync_MCP')) {
+            return;
+        }
+
+        $created_token = '';
+        if (isset($_GET['rag_sync_mcp_token'])) {
+            $created_token = sanitize_text_field(wp_unslash($_GET['rag_sync_mcp_token']));
+        }
+        $clients = RAG_Sync_MCP::list_clients();
+        ?>
+        <div class="rag-sync-mcp-clients">
+            <h2><?php esc_html_e('MCP Clients', 'rag-sync'); ?></h2>
+            <?php if ($created_token): ?>
+                <div class="notice notice-success inline">
+                    <p><?php esc_html_e('Copy this token now. It will not be shown again:', 'rag-sync'); ?></p>
+                    <p><code><?php echo esc_html($created_token); ?></code></p>
+                </div>
+            <?php endif; ?>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <?php wp_nonce_field('rag_sync_mcp_create_client'); ?>
+                <input type="hidden" name="action" value="rag_sync_mcp_create_client">
+                <input type="text" name="client_name" class="regular-text" placeholder="<?php esc_attr_e('Laravel Chat', 'rag-sync'); ?>" required>
+                <button type="submit" class="button button-secondary"><?php esc_html_e('Create MCP Token', 'rag-sync'); ?></button>
+            </form>
+
+            <table class="widefat striped" style="margin-top: 12px;">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e('Client', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Status', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Last Used', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Created', 'rag-sync'); ?></th>
+                        <th><?php esc_html_e('Action', 'rag-sync'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (!$clients): ?>
+                    <tr><td colspan="5"><?php esc_html_e('No MCP clients created yet.', 'rag-sync'); ?></td></tr>
+                <?php endif; ?>
+                <?php foreach ($clients as $client): ?>
+                    <tr>
+                        <td><?php echo esc_html($client['name']); ?></td>
+                        <td><?php echo !empty($client['is_active']) && empty($client['revoked_at']) ? esc_html__('Active', 'rag-sync') : esc_html__('Revoked', 'rag-sync'); ?></td>
+                        <td><?php echo !empty($client['last_used_at']) ? esc_html($client['last_used_at']) : esc_html__('Never', 'rag-sync'); ?></td>
+                        <td><?php echo esc_html($client['created_at']); ?></td>
+                        <td>
+                            <?php if (!empty($client['is_active']) && empty($client['revoked_at'])): ?>
+                                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                                    <?php wp_nonce_field('rag_sync_mcp_revoke_client'); ?>
+                                    <input type="hidden" name="action" value="rag_sync_mcp_revoke_client">
+                                    <input type="hidden" name="client_id" value="<?php echo esc_attr((string) $client['id']); ?>">
+                                    <button type="submit" class="button button-small"><?php esc_html_e('Revoke', 'rag-sync'); ?></button>
+                                </form>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+    }
+
+    /**
+     * Create MCP client token.
+     */
+    public function handle_mcp_create_client(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Permission denied', 'rag-sync'));
+        }
+        check_admin_referer('rag_sync_mcp_create_client');
+        $name = isset($_POST['client_name']) ? sanitize_text_field(wp_unslash($_POST['client_name'])) : '';
+        if ($name === '') {
+            $name = 'MCP Client';
+        }
+        $created = RAG_Sync_MCP::create_client($name);
+        wp_safe_redirect(add_query_arg([
+            'page' => 'rag-sync',
+            'rag_sync_mcp_token' => rawurlencode($created['token']),
+        ], admin_url('options-general.php')));
+        exit;
+    }
+
+    /**
+     * Revoke MCP client.
+     */
+    public function handle_mcp_revoke_client(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Permission denied', 'rag-sync'));
+        }
+        check_admin_referer('rag_sync_mcp_revoke_client');
+        $client_id = isset($_POST['client_id']) ? absint($_POST['client_id']) : 0;
+        if ($client_id > 0) {
+            RAG_Sync_MCP::revoke_client($client_id);
+        }
+        wp_safe_redirect(add_query_arg('page', 'rag-sync', admin_url('options-general.php')));
+        exit;
     }
 
     /**

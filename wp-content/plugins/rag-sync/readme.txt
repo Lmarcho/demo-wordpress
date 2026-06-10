@@ -18,6 +18,7 @@ The plugin does two things:
 
 1. **Content sync** — sends posts, pages, products, categories, and coupons to your AskRAG backend via signed webhooks whenever content is created, updated, or deleted, plus an on-demand full sync. A REST endpoint exposes real-time price and stock data so answers stay current.
 2. **Chat widget** — embeds the AskRAG chat widget on the storefront. All styling (colors, messages, position, voice) is configured in the AskRAG backend, so the widget updates without touching the site.
+3. **MCP server** — optionally exposes read-only WordPress and WooCommerce tools to your AskRAG backend using a bearer token you create in the plugin settings.
 
 The widget bundle is loaded with a cache-busting token derived from the deployed bundle, so a rebuilt widget reaches visitors automatically without serving a stale copy.
 
@@ -26,6 +27,7 @@ The widget bundle is loaded with a cache-busting token derived from the deployed
 * An AskRAG backend with a tenant slug, widget API key, and webhook secret.
 * PHP 8.0 or higher.
 * WooCommerce 8.0+ is optional; product/category/coupon features activate only when WooCommerce is present.
+* WordPress 6.9+ can expose registered RAG Sync abilities to compatible MCP adapter installs. Older WordPress versions use the plugin's fallback MCP endpoint.
 
 == External Services ==
 
@@ -35,6 +37,7 @@ What is sent and when:
 
 * When sync is enabled and content changes (or you trigger a full sync), the plugin sends your posts, pages, products, categories, and coupons — including titles, descriptions, prices, stock, and SKUs — to your configured Backend URL via signed webhooks.
 * When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages, plus minimal session/customer context (a generated session ID, and for logged-in users their WooCommerce/WordPress identifiers) to that backend to generate answers.
+* When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, and customer-owned WooCommerce order/history/cart data only when a logged-in customer assertion is provided.
 * A lightweight request is made from the server to the Backend URL to detect the current widget version for cache-busting.
 
 No data is sent to any party other than the Backend URL you configure.

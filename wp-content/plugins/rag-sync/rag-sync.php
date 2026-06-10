@@ -76,6 +76,7 @@ final class RAG_Sync {
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-rest-api.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-wordpress-hooks.php';
         require_once RAG_SYNC_PLUGIN_DIR . 'includes/class-rag-sync-woocommerce-hooks.php';
+        require_once RAG_SYNC_PLUGIN_DIR . 'includes/mcp/class-rag-sync-mcp.php';
     }
 
     /**
@@ -97,6 +98,8 @@ final class RAG_Sync {
      * Initialize plugin components
      */
     public function init(): void {
+        $this->maybe_upgrade_mcp();
+
         // Initialize admin
         $this->admin = new RAG_Sync_Admin();
 
@@ -105,6 +108,9 @@ final class RAG_Sync {
 
         // Initialize REST API for real-time product data
         new RAG_Sync_REST_API();
+
+        // Initialize MCP endpoints and optional WordPress Abilities integration
+        new RAG_Sync_MCP();
 
         // Initialize WordPress hooks (posts, pages)
         new RAG_Sync_WordPress_Hooks($this->webhook);
@@ -119,6 +125,18 @@ final class RAG_Sync {
 
         // Load text domain
         load_plugin_textdomain('rag-sync', false, dirname(RAG_SYNC_PLUGIN_BASENAME) . '/languages');
+    }
+
+    /**
+     * Ensure MCP tables exist for already-installed plugin upgrades.
+     */
+    private function maybe_upgrade_mcp(): void {
+        if (get_option('rag_sync_mcp_db_version') === RAG_SYNC_VERSION) {
+            return;
+        }
+
+        RAG_Sync_MCP::create_tables();
+        update_option('rag_sync_mcp_db_version', RAG_SYNC_VERSION);
     }
 
     /**
@@ -392,6 +410,7 @@ final class RAG_Sync {
 
         // Create sync tracking table
         RAG_Sync_DB::create_table();
+        RAG_Sync_MCP::create_tables();
 
         // Set default options
         $defaults = [
@@ -414,6 +433,8 @@ final class RAG_Sync {
             'rag_sync_widget_enabled' => false,
             'rag_sync_widget_debug' => false,
         ];
+
+        $defaults = array_merge($defaults, RAG_Sync_MCP::defaults());
 
         foreach ($defaults as $key => $value) {
             if (get_option($key) === false) {
