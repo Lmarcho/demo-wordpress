@@ -26,7 +26,7 @@ class RAG_Sync_MCP {
 
     private const TOOLS = [
         'get_store_context' => 'Return WordPress/WooCommerce public store context.',
-        'get_products_live' => 'Return normalized live WooCommerce data for requested SKUs.',
+        'get_products_live' => 'Return normalized live WooCommerce data for requested SKUs or product IDs.',
         'search_products_live' => 'Search public WooCommerce products.',
         'get_category_products' => 'Return public WooCommerce products assigned to a product category.',
         'get_product_variants' => 'Return bounded WooCommerce variation data.',
@@ -188,7 +188,7 @@ class RAG_Sync_MCP {
         $id = $decoded['id'] ?? null;
         $method = $decoded['method'] ?? null;
         $params = $decoded['params'] ?? [];
-        if (($decoded['jsonrpc'] ?? null) !== '2.0' || !is_string($method) || !is_array($params) || array_is_list($params)) {
+        if (($decoded['jsonrpc'] ?? null) !== '2.0' || !is_string($method) || !is_array($params) || ($params !== [] && array_is_list($params))) {
             return $this->json_rpc_error($id, -32600, 'Invalid Request', $correlation_id);
         }
         if (!array_key_exists('id', $decoded)) {
@@ -352,7 +352,10 @@ class RAG_Sync_MCP {
 
     private function schema_for(string $name): array {
         return match ($name) {
-            'get_products_live' => $this->object_schema(['skus' => ['type' => 'array', 'items' => ['type' => 'string'], 'minItems' => 1]], ['skus']),
+            'get_products_live' => $this->object_schema([
+                'skus' => ['type' => 'array', 'items' => ['type' => 'string'], 'minItems' => 1],
+                'product_ids' => ['type' => 'array', 'items' => ['type' => 'integer'], 'minItems' => 1],
+            ]),
             'search_products_live', 'search_content_live' => $this->object_schema(['query' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]], ['query']),
             'get_category_products' => $this->object_schema(['category_id' => ['type' => 'integer'], 'slug' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]]),
             'get_product_variants', 'get_related_products' => $this->object_schema(['sku' => ['type' => 'string'], 'product_id' => ['type' => 'integer'], 'link_type' => ['type' => 'string']]),
@@ -393,9 +396,15 @@ class RAG_Sync_MCP {
 
     private function get_products_live(array $args): array {
         $this->require_wc();
-        $skus = array_slice(array_values(array_unique(array_filter(array_map('strval', $args['skus'] ?? [])))), 0, $this->max_skus());
-        if (!$skus) {
-            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'SKUS_REQUIRED']);
+        $max = $this->max_skus();
+        $skus = array_slice(array_values(array_unique(array_filter(array_map('strval', $args['skus'] ?? [])))), 0, $max);
+        $product_ids = array_slice(
+            array_values(array_unique(array_filter(array_map('absint', $args['product_ids'] ?? [])))),
+            0,
+            max(0, $max - count($skus))
+        );
+        if (!$skus && !$product_ids) {
+            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'PRODUCT_REFERENCES_REQUIRED']);
         }
         $products = [];
         $errors = [];
@@ -404,6 +413,14 @@ class RAG_Sync_MCP {
             $product = $product_id ? wc_get_product($product_id) : null;
             if (!$product || $product->get_status() !== 'publish') {
                 $errors[] = ['sku' => $sku, 'error_code' => 'PRODUCT_NOT_FOUND'];
+                continue;
+            }
+            $products[] = $this->product_payload($product, true);
+        }
+        foreach ($product_ids as $product_id) {
+            $product = wc_get_product((int) $product_id);
+            if (!$product || $product->get_status() !== 'publish') {
+                $errors[] = ['product_id' => (int) $product_id, 'error_code' => 'PRODUCT_NOT_FOUND'];
                 continue;
             }
             $products[] = $this->product_payload($product, true);
