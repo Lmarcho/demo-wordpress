@@ -32,6 +32,7 @@ class RAG_Sync_MCP {
         'get_product_variants' => 'Return bounded WooCommerce variation data.',
         'get_related_products' => 'Return related, upsell, or cross-sell WooCommerce products.',
         'get_active_promotions' => 'Return public active WooCommerce coupon summaries.',
+        'get_product_popularity' => 'Return aggregate WooCommerce product purchase counts for ranking.',
         'get_content_live' => 'Return published WordPress posts or pages by ID or slug.',
         'search_content_live' => 'Search published WordPress posts and pages.',
         'get_order_status' => 'Return an asserted customer-owned WooCommerce order status.',
@@ -313,6 +314,7 @@ class RAG_Sync_MCP {
             'get_product_variants' => $this->get_product_variants($args),
             'get_related_products' => $this->get_related_products($args),
             'get_active_promotions' => $this->get_active_promotions($args),
+            'get_product_popularity' => $this->get_product_popularity($args),
             'get_content_live' => $this->get_content_live($args),
             'search_content_live' => $this->search_content_live($args),
             'get_order_status' => $this->get_order_status($args),
@@ -359,6 +361,15 @@ class RAG_Sync_MCP {
             'search_products_live', 'search_content_live' => $this->object_schema(['query' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]], ['query']),
             'get_category_products' => $this->object_schema(['category_id' => ['type' => 'integer'], 'slug' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]]),
             'get_product_variants', 'get_related_products' => $this->object_schema(['sku' => ['type' => 'string'], 'product_id' => ['type' => 'integer'], 'link_type' => ['type' => 'string']]),
+            'get_product_popularity' => $this->object_schema([
+                'skus' => ['type' => 'array', 'items' => ['type' => 'string']],
+                'product_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                'category_id' => ['type' => 'integer'],
+                'slug' => ['type' => 'string'],
+                'query' => ['type' => 'string'],
+                'window_days' => ['type' => 'integer', 'minimum' => 0],
+                'limit' => ['type' => 'integer', 'minimum' => 1],
+            ]),
             'get_content_live' => $this->object_schema(['ids' => ['type' => 'array', 'items' => ['type' => 'integer']], 'slugs' => ['type' => 'array', 'items' => ['type' => 'string']], 'type' => ['type' => 'string']]),
             'get_order_status' => $this->object_schema(['order_number' => ['type' => 'string'], 'customer_assertion' => ['type' => 'string']], ['order_number', 'customer_assertion']),
             'get_customer_cart', 'get_customer_purchase_history' => $this->object_schema(['customer_assertion' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]], ['customer_assertion']),
@@ -528,6 +539,37 @@ class RAG_Sync_MCP {
         return ['promotions' => $promotions];
     }
 
+    private function get_product_popularity(array $args): array {
+        $this->require_wc();
+
+        $window_days = min(max(0, (int) ($args['window_days'] ?? 90)), 3650);
+        $limit = $this->popularity_limit($args);
+        $eligible_ids = $this->popularity_product_ids($args);
+
+        if (is_array($eligible_ids) && empty($eligible_ids)) {
+            return [
+                'window_days' => $window_days,
+                'total' => 0,
+                'returned' => 0,
+                'items' => [],
+                'fetched_at' => gmdate('c'),
+            ];
+        }
+
+        $items = $this->popularity_from_lookup($eligible_ids, $window_days, $limit);
+        if ($items === null) {
+            $items = $window_days === 0 ? $this->popularity_from_total_sales($eligible_ids, $limit) : [];
+        }
+
+        return [
+            'window_days' => $window_days,
+            'total' => count($items),
+            'returned' => count($items),
+            'items' => $items,
+            'fetched_at' => gmdate('c'),
+        ];
+    }
+
     private function get_content_live(array $args): array {
         $type = $this->content_type($args['type'] ?? null);
         $items = [];
@@ -655,6 +697,235 @@ class RAG_Sync_MCP {
             }
         }
         return ['history' => ['returned' => count($by_sku), 'items' => array_values(array_slice($by_sku, 0, $this->limit($args), true))]];
+    }
+
+    private function popularity_limit(array $args): int {
+        return min(max(1, (int) ($args['limit'] ?? 500)), 500);
+    }
+
+    /**
+     * @return array<int,int>|null
+     */
+    private function popularity_product_ids(array $args): ?array {
+        $ids = [];
+        $has_filter = false;
+
+        foreach ((array) ($args['product_ids'] ?? []) as $id) {
+            $has_filter = true;
+            $id = (int) $id;
+            if ($id > 0) {
+                $ids[] = $this->public_parent_product_id($id);
+            }
+        }
+
+        foreach ((array) ($args['skus'] ?? []) as $sku) {
+            $has_filter = true;
+            $id = wc_get_product_id_by_sku(sanitize_text_field((string) $sku));
+            if ($id) {
+                $ids[] = $this->public_parent_product_id((int) $id);
+            }
+        }
+
+        $category_id = (int) ($args['category_id'] ?? 0);
+        $slug = sanitize_title((string) ($args['slug'] ?? ''));
+        $query = sanitize_text_field((string) ($args['query'] ?? ''));
+        if ($category_id > 0 || $slug !== '' || $query !== '') {
+            $has_filter = true;
+            $query_args = [
+                'post_type' => 'product',
+                'post_status' => 'publish',
+                'fields' => 'ids',
+                'posts_per_page' => 500,
+            ];
+
+            if ($query !== '') {
+                $query_args['s'] = $query;
+            }
+
+            $term = null;
+            if ($category_id > 0) {
+                $term = get_term($category_id, 'product_cat');
+            } elseif ($slug !== '') {
+                $term = get_term_by('slug', $slug, 'product_cat');
+            }
+
+            if ($term && !is_wp_error($term)) {
+                $query_args['tax_query'] = [[
+                    'taxonomy' => 'product_cat',
+                    'field' => 'term_id',
+                    'terms' => [(int) $term->term_id],
+                ]];
+            }
+
+            $wp_query = new WP_Query($query_args);
+            foreach ($wp_query->posts as $id) {
+                $ids[] = $this->public_parent_product_id((int) $id);
+            }
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        return $has_filter ? $ids : null;
+    }
+
+    private function public_parent_product_id(int $id): int {
+        $product = wc_get_product($id);
+        if (!$product) {
+            return 0;
+        }
+        if ($product->is_type('variation') && $product->get_parent_id() > 0) {
+            $product = wc_get_product($product->get_parent_id());
+        }
+        if (!$product || $product->get_status() !== 'publish') {
+            return 0;
+        }
+
+        return (int) $product->get_id();
+    }
+
+    /**
+     * @param array<int,int>|null $eligible_ids
+     * @return array<int,array<string,mixed>>|null
+     */
+    private function popularity_from_lookup(?array $eligible_ids, int $window_days, int $limit): ?array {
+        global $wpdb;
+
+        $lookup_table = $wpdb->prefix . 'wc_order_product_lookup';
+        $stats_table = $wpdb->prefix . 'wc_order_stats';
+        if (!$this->table_exists($lookup_table) || !$this->table_exists($stats_table)) {
+            return null;
+        }
+
+        $where = [
+            "stats.status NOT IN ('wc-cancelled', 'wc-refunded', 'wc-failed', 'trash')",
+            'lookup.product_qty > 0',
+        ];
+        $params = [];
+
+        if ($window_days > 0) {
+            $where[] = 'stats.date_created >= %s';
+            $params[] = gmdate('Y-m-d H:i:s', time() - ($window_days * DAY_IN_SECONDS));
+        }
+
+        if (is_array($eligible_ids)) {
+            $lookup_ids = $this->expanded_lookup_product_ids($eligible_ids);
+            if (empty($lookup_ids)) {
+                return [];
+            }
+            $placeholders = implode(', ', array_fill(0, count($lookup_ids), '%d'));
+            $where[] = "(lookup.product_id IN ({$placeholders}) OR lookup.variation_id IN ({$placeholders}))";
+            $params = array_merge($params, $lookup_ids, $lookup_ids);
+        }
+
+        $parent_expr = 'CASE WHEN lookup.variation_id > 0 AND variation.post_parent > 0 THEN variation.post_parent ELSE lookup.product_id END';
+        $params[] = $limit;
+        $sql = "
+            SELECT {$parent_expr} AS product_id, ROUND(SUM(lookup.product_qty)) AS purchase_count
+            FROM {$lookup_table} lookup
+            INNER JOIN {$stats_table} stats ON stats.order_id = lookup.order_id
+            LEFT JOIN {$wpdb->posts} variation ON variation.ID = lookup.variation_id
+            WHERE " . implode(' AND ', $where) . "
+            GROUP BY product_id
+            HAVING purchase_count > 0
+            ORDER BY purchase_count DESC, product_id ASC
+            LIMIT %d
+        ";
+
+        $rows = $wpdb->get_results($wpdb->prepare($sql, $params), ARRAY_A);
+        $items = [];
+        foreach ((array) $rows as $row) {
+            $item = $this->normalise_popularity_item((int) ($row['product_id'] ?? 0), count($items) + 1, (int) ($row['purchase_count'] ?? 0));
+            if ($item) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param array<int,int> $ids
+     * @return array<int,int>
+     */
+    private function expanded_lookup_product_ids(array $ids): array {
+        $lookup_ids = [];
+        foreach ($ids as $id) {
+            $product = wc_get_product((int) $id);
+            if (!$product) {
+                continue;
+            }
+            $lookup_ids[] = (int) $product->get_id();
+            if ($product->is_type('variable')) {
+                foreach ($product->get_children() as $child_id) {
+                    $lookup_ids[] = (int) $child_id;
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter($lookup_ids)));
+    }
+
+    /**
+     * @param array<int,int>|null $eligible_ids
+     * @return array<int,array<string,mixed>>
+     */
+    private function popularity_from_total_sales(?array $eligible_ids, int $limit): array {
+        $ids = $eligible_ids;
+        if ($ids === null) {
+            $ids = wc_get_products([
+                'status' => 'publish',
+                'limit' => 500,
+                'return' => 'ids',
+            ]);
+        }
+
+        $items = [];
+        foreach ((array) $ids as $id) {
+            $product = wc_get_product((int) $id);
+            if (!$product || $product->get_status() !== 'publish') {
+                continue;
+            }
+            $items[] = [
+                'product_id' => (int) $product->get_id(),
+                'external_id' => (string) $product->get_id(),
+                'sku' => (string) $product->get_sku(),
+                'purchase_count' => max(0, (int) $product->get_total_sales()),
+            ];
+        }
+
+        usort($items, fn($a, $b) => ($b['purchase_count'] <=> $a['purchase_count']) ?: ($a['product_id'] <=> $b['product_id']));
+        $items = array_slice($items, 0, $limit);
+        foreach ($items as $index => &$item) {
+            $item['rank'] = $index + 1;
+        }
+        unset($item);
+
+        return array_values(array_filter($items, fn($item) => (int) $item['purchase_count'] > 0));
+    }
+
+    private function normalise_popularity_item(int $product_id, int $rank, int $purchase_count): ?array {
+        $product_id = $this->public_parent_product_id($product_id);
+        if ($product_id < 1 || $purchase_count < 1) {
+            return null;
+        }
+        $product = wc_get_product($product_id);
+        if (!$product) {
+            return null;
+        }
+
+        return [
+            'rank' => $rank,
+            'product_id' => $product_id,
+            'external_id' => (string) $product_id,
+            'sku' => (string) $product->get_sku(),
+            'purchase_count' => $purchase_count,
+        ];
+    }
+
+    private function table_exists(string $table): bool {
+        global $wpdb;
+
+        return (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table;
     }
 
     private function product_payload(WC_Product $product, bool $include_variants): array {
