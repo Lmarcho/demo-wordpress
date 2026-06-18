@@ -4,7 +4,7 @@ Tags: ai, chatbot, woocommerce, rag, chat widget
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 8.0
-Stable tag: 1.0.0
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,11 +71,21 @@ Content is sent only to the Backend URL you configure. Webhooks are signed with 
 
 == Changelog ==
 
+= 1.0.2 =
+* Added logged-in WooCommerce customer assertion wiring for secure order-status MCP lookups from the chat widget.
+* Included safe shipping-method summaries in WooCommerce MCP order status payloads.
+
+= 1.0.1 =
+* Backfilled default MCP client tools during plugin upgrades.
+
 = 1.0.0 =
 * Initial release: content sync via signed webhooks, on-demand full sync, real-time product REST endpoint, and embedded AI chat widget.
 * Widget cache-busting derived from the deployed bundle to avoid stale copies.
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+Logged-in WooCommerce customers can securely ask the widget about their own order status when MCP is enabled.
 
 = 1.0.0 =
 Initial release.

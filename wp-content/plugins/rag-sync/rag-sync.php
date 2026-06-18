@@ -3,7 +3,7 @@
  * Plugin Name: RAG Sync
  * Plugin URI: https://askrag.app
  * Description: Syncs WordPress/WooCommerce content to the AskRAG backend and embeds the AI-powered chat widget.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: AskRAG
  * Author URI: https://askrag.app
  * License: GPL v2 or later
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants
-define('RAG_SYNC_VERSION', '1.0.1');
+define('RAG_SYNC_VERSION', '1.0.2');
 define('RAG_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RAG_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('RAG_SYNC_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -191,8 +191,34 @@ final class RAG_Sync {
             'apiKey' => $api_key,
             'customer' => $this->get_customer_context(),
             'session' => $this->get_chat_session(),
+            'customerAssertionEndpoint' => $this->get_customer_assertion_endpoint(),
+            'customerAssertionNonce' => $this->get_customer_assertion_nonce(),
             'debug' => (bool) self::get_option('widget_debug', false),
         ]);
+    }
+
+    /**
+     * Endpoint used by the remote widget to request a short-lived customer
+     * assertion from the current logged-in WordPress/WooCommerce session.
+     */
+    private function get_customer_assertion_endpoint(): ?string {
+        if (!RAG_Sync_MCP::is_enabled() || !is_user_logged_in()) {
+            return null;
+        }
+
+        return rest_url(RAG_Sync_MCP::REST_NAMESPACE . RAG_Sync_MCP::ASSERTION_ROUTE);
+    }
+
+    /**
+     * WordPress REST cookie authentication requires a REST nonce for logged-in
+     * browser requests. The assertion endpoint still validates the active user.
+     */
+    private function get_customer_assertion_nonce(): ?string {
+        if (!RAG_Sync_MCP::is_enabled() || !is_user_logged_in()) {
+            return null;
+        }
+
+        return wp_create_nonce('wp_rest');
     }
 
     /**

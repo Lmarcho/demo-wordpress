@@ -1082,6 +1082,14 @@ class RAG_Sync_MCP {
                 'quantity' => (float) $item->get_quantity(),
             ];
         }
+        $shipping_methods = [];
+        foreach ($order->get_shipping_methods() as $shipping_method) {
+            $method_name = trim((string) $shipping_method->get_name());
+            if ($method_name !== '') {
+                $shipping_methods[] = $method_name;
+            }
+        }
+
         return [
             'order_number' => (string) $order->get_order_number(),
             'status' => $order->get_status(),
@@ -1090,6 +1098,8 @@ class RAG_Sync_MCP {
             'currency' => $order->get_currency(),
             'grand_total' => (float) $order->get_total(),
             'items' => $items,
+            'shipping_description' => $shipping_methods !== [] ? implode(', ', array_values(array_unique($shipping_methods))) : null,
+            'shipments' => [],
         ];
     }
 
