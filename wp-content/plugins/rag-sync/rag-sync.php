@@ -3,7 +3,7 @@
  * Plugin Name: RAG Sync
  * Plugin URI: https://askrag.app
  * Description: Syncs WordPress/WooCommerce content to the AskRAG backend and embeds the AI-powered chat widget.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: AskRAG
  * Author URI: https://askrag.app
  * License: GPL v2 or later
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants
-define('RAG_SYNC_VERSION', '1.0.0');
+define('RAG_SYNC_VERSION', '1.0.1');
 define('RAG_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RAG_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('RAG_SYNC_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -136,6 +136,7 @@ final class RAG_Sync {
         }
 
         RAG_Sync_MCP::create_tables();
+        RAG_Sync_MCP::upgrade_default_client_tools();
         update_option('rag_sync_mcp_db_version', RAG_SYNC_VERSION);
     }
 

@@ -40,6 +40,21 @@ class RAG_Sync_MCP {
         'get_customer_purchase_history' => 'Return asserted customer product-level purchase history.',
     ];
 
+    private const DEFAULT_CLIENT_TOOLS_BEFORE_POPULARITY = [
+        'get_store_context',
+        'get_products_live',
+        'search_products_live',
+        'get_category_products',
+        'get_product_variants',
+        'get_related_products',
+        'get_active_promotions',
+        'get_content_live',
+        'search_content_live',
+        'get_order_status',
+        'get_customer_cart',
+        'get_customer_purchase_history',
+    ];
+
     public function __construct() {
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('wp_abilities_api_init', [$this, 'register_abilities']);
@@ -115,6 +130,48 @@ class RAG_Sync_MCP {
             'id' => (int) $wpdb->insert_id,
             'token' => $token,
         ];
+    }
+
+    public static function upgrade_default_client_tools(): int {
+        global $wpdb;
+
+        $rows = $wpdb->get_results(
+            'SELECT id, allowed_tools FROM ' . self::client_table() . ' WHERE revoked_at IS NULL',
+            ARRAY_A
+        ) ?: [];
+        $upgraded = 0;
+        $current_tools = array_keys(self::TOOLS);
+
+        foreach ($rows as $row) {
+            $tools = json_decode((string) ($row['allowed_tools'] ?? ''), true);
+            if (!is_array($tools)) {
+                continue;
+            }
+
+            $tools = array_values(array_intersect($tools, $current_tools));
+            if (array_diff(self::DEFAULT_CLIENT_TOOLS_BEFORE_POPULARITY, $tools) !== []) {
+                continue;
+            }
+
+            $merged = array_values(array_unique(array_merge($tools, $current_tools)));
+            sort($tools);
+            $sorted_merged = $merged;
+            sort($sorted_merged);
+            if ($tools === $sorted_merged) {
+                continue;
+            }
+
+            $updated = $wpdb->update(self::client_table(), [
+                'allowed_tools' => wp_json_encode($merged),
+                'updated_at' => current_time('mysql'),
+            ], ['id' => (int) $row['id']]);
+
+            if ($updated !== false) {
+                $upgraded++;
+            }
+        }
+
+        return $upgraded;
     }
 
     public static function revoke_client(int $client_id): bool {
