@@ -1,0 +1,12 @@
+.git
+.github
+.svn
+.DS_Store
+node_modules
+npm-debug.log
+yarn-error.log
+tests
+coverage
+html
+*.map
+PUBLISHING.md

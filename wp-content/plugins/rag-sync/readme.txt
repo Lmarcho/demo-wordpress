@@ -2,7 +2,7 @@
 Contributors: askrag
 Tags: ai, chatbot, woocommerce, rag, chat widget
 Requires at least: 6.0
-Tested up to: 6.5
+Tested up to: 6.9
 Requires PHP: 8.0
 Stable tag: 1.0.3
 License: GPLv2 or later
@@ -54,6 +54,7 @@ Privacy Policy: https://askrag.app/privacy
 4. Enter your Backend URL, Tenant Slug, API Key, Webhook Secret, and Webhook Endpoint (copy these from your AskRAG backend).
 5. Enable Sync and/or Enable Widget as needed.
 6. Click "Test Connection" to verify the webhook secret, then "Trigger Full Sync" to send existing content.
+7. To enable MCP order tools, enable MCP, create an MCP client token, then copy the MCP endpoint and token into the AskRAG tenant settings.
 
 == Frequently Asked Questions ==
 
@@ -68,6 +69,14 @@ The widget URL is cache-busted from the deployed bundle and refreshes within a f
 = Is my data sent anywhere else? =
 
 Content is sent only to the Backend URL you configure. Webhooks are signed with your webhook secret.
+
+= How do WooCommerce order status questions work? =
+
+Logged-in customers use a short-lived customer assertion issued by this site. Guest customers use a widget verification form with order number plus billing email or phone. The billing contact is not sent through normal chat text or the LLM prompt.
+
+= Where is the MCP setup guide? =
+
+See `docs/order-tools-setup.md` in the plugin package.
 
 == Changelog ==
 

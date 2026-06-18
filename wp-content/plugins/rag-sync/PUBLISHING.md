@@ -20,6 +20,9 @@ the WordPress.org plugin directory.
 - [x] `Update URI` header removed (WordPress.org is the canonical update source).
 - [x] `External Services` disclosure section in `readme.txt`.
 - [x] Scoped `phpcs:disable` on the read-only admin list filter.
+- [x] MCP order tools setup guide in `docs/order-tools-setup.md`.
+- [x] Marketplace checklist in `MARKETPLACE_CHECKLIST.md`.
+- [x] `.distignore` for cleaner self-hosted ZIP builds.
 
 ---
 
@@ -28,8 +31,9 @@ the WordPress.org plugin directory.
 - [ ] **Privacy & Terms pages live** at https://askrag.app/privacy and
       https://askrag.app/terms (reviewers click these). Update `readme.txt` if
       the real URLs differ.
-- [ ] **`Tested up to:`** in `readme.txt` — bump to the latest WordPress version
-      actually tested.
+- [x] **`Tested up to:`** in `readme.txt` — verified locally with WordPress 6.9.
+- [x] **`WC tested up to:`** in `rag-sync.php` — verified locally with
+      WooCommerce 10.4.3.
 - [ ] **`Contributors:`** in `readme.txt` — replace `askrag` with a real
       WordPress.org account username.
 - [ ] **Register a WordPress.org account** (the contributor above) if not done.
