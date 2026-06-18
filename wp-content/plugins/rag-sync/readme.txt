@@ -4,7 +4,7 @@ Tags: ai, chatbot, woocommerce, rag, chat widget
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 8.0
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -37,7 +37,7 @@ What is sent and when:
 
 * When sync is enabled and content changes (or you trigger a full sync), the plugin sends your posts, pages, products, categories, and coupons — including titles, descriptions, prices, stock, and SKUs — to your configured Backend URL via signed webhooks.
 * When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages, plus minimal session/customer context (a generated session ID, and for logged-in users their WooCommerce/WordPress identifiers) to that backend to generate answers.
-* When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, and customer-owned WooCommerce order/history/cart data only when a logged-in customer assertion is provided.
+* When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, customer-owned WooCommerce order/history/cart data when a logged-in customer assertion is provided, and limited guest order status when the submitted order number matches the billing email or phone.
 * A lightweight request is made from the server to the Backend URL to detect the current widget version for cache-busting.
 
 No data is sent to any party other than the Backend URL you configure.
@@ -71,6 +71,9 @@ Content is sent only to the Backend URL you configure. Webhooks are signed with 
 
 == Changelog ==
 
+= 1.0.3 =
+* Added guest WooCommerce order verification through MCP using order number plus billing email or phone.
+
 = 1.0.2 =
 * Added logged-in WooCommerce customer assertion wiring for secure order-status MCP lookups from the chat widget.
 * Included safe shipping-method summaries in WooCommerce MCP order status payloads.
@@ -83,6 +86,9 @@ Content is sent only to the Backend URL you configure. Webhooks are signed with 
 * Widget cache-busting derived from the deployed bundle to avoid stale copies.
 
 == Upgrade Notice ==
+
+= 1.0.3 =
+Default MCP clients receive the new guest order verification tool during plugin upgrade.
 
 = 1.0.2 =
 Logged-in WooCommerce customers can securely ask the widget about their own order status when MCP is enabled.

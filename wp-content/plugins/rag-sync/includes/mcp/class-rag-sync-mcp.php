@@ -36,6 +36,7 @@ class RAG_Sync_MCP {
         'get_content_live' => 'Return published WordPress posts or pages by ID or slug.',
         'search_content_live' => 'Search published WordPress posts and pages.',
         'get_order_status' => 'Return an asserted customer-owned WooCommerce order status.',
+        'verify_guest_order' => 'Verify a WooCommerce guest order using order number plus billing email or phone.',
         'get_customer_cart' => 'Return the asserted customer persistent WooCommerce cart when available.',
         'get_customer_purchase_history' => 'Return asserted customer product-level purchase history.',
     ];
@@ -350,7 +351,7 @@ class RAG_Sync_MCP {
         if (!in_array($name, $client['allowed_tools'], true)) {
             throw new RAG_Sync_MCP_Exception('Access denied', -32003);
         }
-        if ($name === 'get_order_status' && !$this->rate_allowed('order:' . $client['id'], 20)) {
+        if (in_array($name, ['get_order_status', 'verify_guest_order'], true) && !$this->rate_allowed('order:' . $client['id'], 20)) {
             throw new RAG_Sync_MCP_Exception('Rate limit exceeded', -32007);
         }
         $arguments = $params['arguments'] ?? [];
@@ -375,6 +376,7 @@ class RAG_Sync_MCP {
             'get_content_live' => $this->get_content_live($args),
             'search_content_live' => $this->search_content_live($args),
             'get_order_status' => $this->get_order_status($args),
+            'verify_guest_order' => $this->verify_guest_order($args),
             'get_customer_cart' => $this->get_customer_cart($args),
             'get_customer_purchase_history' => $this->get_customer_purchase_history($args),
             default => throw new RAG_Sync_MCP_Exception('Unknown tool', -32602),
@@ -429,6 +431,7 @@ class RAG_Sync_MCP {
             ]),
             'get_content_live' => $this->object_schema(['ids' => ['type' => 'array', 'items' => ['type' => 'integer']], 'slugs' => ['type' => 'array', 'items' => ['type' => 'string']], 'type' => ['type' => 'string']]),
             'get_order_status' => $this->object_schema(['order_number' => ['type' => 'string'], 'customer_assertion' => ['type' => 'string']], ['order_number', 'customer_assertion']),
+            'verify_guest_order' => $this->object_schema(['order_number' => ['type' => 'string'], 'contact' => ['type' => 'string']], ['order_number', 'contact']),
             'get_customer_cart', 'get_customer_purchase_history' => $this->object_schema(['customer_assertion' => ['type' => 'string'], 'limit' => ['type' => 'integer', 'minimum' => 1]], ['customer_assertion']),
             default => $this->object_schema(),
         };
@@ -681,6 +684,28 @@ class RAG_Sync_MCP {
             }
         }
         throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
+    }
+
+    private function verify_guest_order(array $args): array {
+        $this->require_wc();
+        $number = sanitize_text_field((string) ($args['order_number'] ?? ''));
+        $contact = sanitize_text_field((string) ($args['contact'] ?? ''));
+        if ($number === '' || strlen($number) > 32 || !preg_match('/\A[a-zA-Z0-9_-]+\z/', $number)) {
+            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'INVALID_ORDER_NUMBER']);
+        }
+        if (!$this->valid_guest_contact($contact)) {
+            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'INVALID_GUEST_CONTACT']);
+        }
+
+        $order = ctype_digit($number) ? wc_get_order((int) $number) : false;
+        if (!$order instanceof WC_Order || ((string) $order->get_order_number() !== $number && (string) $order->get_id() !== $number)) {
+            throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
+        }
+        if (!$this->guest_order_contact_matches($order, $contact)) {
+            throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
+        }
+
+        return ['order' => $this->guest_order_payload($order)];
     }
 
     private function get_customer_cart(array $args): array {
@@ -1101,6 +1126,59 @@ class RAG_Sync_MCP {
             'shipping_description' => $shipping_methods !== [] ? implode(', ', array_values(array_unique($shipping_methods))) : null,
             'shipments' => [],
         ];
+    }
+
+    private function guest_order_payload(WC_Order $order): array {
+        $shipping_methods = [];
+        foreach ($order->get_shipping_methods() as $shipping_method) {
+            $method_name = trim((string) $shipping_method->get_name());
+            if ($method_name !== '') {
+                $shipping_methods[] = $method_name;
+            }
+        }
+
+        return [
+            'order_number' => (string) $order->get_order_number(),
+            'status' => $order->get_status(),
+            'status_label' => wc_get_order_status_name($order->get_status()),
+            'placed_at' => $order->get_date_created() ? $order->get_date_created()->date('c') : null,
+            'currency' => $order->get_currency(),
+            'grand_total' => (float) $order->get_total(),
+            'items_count' => count($order->get_items()),
+            'shipping_description' => $shipping_methods !== [] ? implode(', ', array_values(array_unique($shipping_methods))) : null,
+        ];
+    }
+
+    private function valid_guest_contact(string $contact): bool {
+        $contact = trim($contact);
+        if ($contact === '' || strlen($contact) > 190) {
+            return false;
+        }
+
+        if (is_email($contact)) {
+            return true;
+        }
+
+        $digits = preg_replace('/\D+/', '', $contact) ?: '';
+        return strlen($digits) >= 6 && preg_match('/\A[0-9+()\-\s.]+\z/', $contact) === 1;
+    }
+
+    private function guest_order_contact_matches(WC_Order $order, string $contact): bool {
+        $contact = trim($contact);
+        if (is_email($contact)) {
+            return strtolower($contact) === strtolower((string) $order->get_billing_email());
+        }
+
+        $submitted = preg_replace('/\D+/', '', $contact) ?: '';
+        if (strlen($submitted) < 6) {
+            return false;
+        }
+
+        $billing = preg_replace('/\D+/', '', (string) $order->get_billing_phone()) ?: '';
+        $shippingPhone = method_exists($order, 'get_shipping_phone') ? $order->get_shipping_phone() : '';
+        $shipping = preg_replace('/\D+/', '', (string) $shippingPhone) ?: '';
+
+        return $submitted !== '' && ($submitted === $billing || $submitted === $shipping);
     }
 
     private function products_from_ids(array $ids): array {
