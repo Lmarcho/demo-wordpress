@@ -36,7 +36,7 @@ This plugin connects to the AskRAG backend that you configure (the "Backend URL"
 What is sent and when:
 
 * When sync is enabled and content changes (or you trigger a full sync), the plugin sends your posts, pages, products, categories, and coupons — including titles, descriptions, prices, stock, and SKUs — to your configured Backend URL via signed webhooks.
-* When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages, plus minimal session/customer context (a generated session ID, and for logged-in users their WooCommerce/WordPress identifiers) to that backend to generate answers.
+* When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages plus session/customer context to that backend to generate answers. This context includes a generated chat session ID, login state, and, for logged-in users, their WordPress/WooCommerce customer ID, email address, display/customer name, optional customer group ID when supplied by a site filter, and any previous guest session ID used to merge the visitor's chat history after login.
 * When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, customer-owned WooCommerce order/history/cart data when a logged-in customer assertion is provided, and limited guest order status when the submitted order number matches the billing email or phone. WordPress Abilities registration is limited to public catalog/content tools; customer and order tools are not registered as public abilities.
 * A lightweight request is made from the server to the Backend URL to detect the current widget version for cache-busting.
 
@@ -82,6 +82,7 @@ See `docs/order-tools-setup.md` in the plugin package.
 
 = 1.0.3 =
 * Added guest WooCommerce order verification through MCP using order number plus billing email or phone.
+* Improved WooCommerce order lookup for custom order numbers and customers with more than 20 orders.
 
 = 1.0.2 =
 * Added logged-in WooCommerce customer assertion wiring for secure order-status MCP lookups from the chat widget.

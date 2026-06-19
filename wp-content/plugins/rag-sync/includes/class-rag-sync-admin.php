@@ -1101,6 +1101,10 @@ class RAG_Sync_Admin {
     public function ajax_get_status(): void {
         check_ajax_referer('rag_sync_nonce', 'nonce');
 
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Permission denied', 'rag-sync')]);
+        }
+
         wp_send_json_success([
             'status' => RAG_Sync::get_option('sync_status', 'idle'),
             'last_sync' => RAG_Sync::get_option('last_sync'),

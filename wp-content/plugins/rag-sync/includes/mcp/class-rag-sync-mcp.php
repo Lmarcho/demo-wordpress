@@ -693,44 +693,203 @@ class RAG_Sync_MCP {
     private function get_order_status(array $args): array {
         $this->require_wc();
         $customer_id = $this->asserted_customer_id($args);
-        $number = sanitize_text_field((string) ($args['order_number'] ?? ''));
+        $number = $this->normalize_order_number((string) ($args['order_number'] ?? ''));
         if ($number === '') {
             throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'ORDER_NUMBER_REQUIRED']);
         }
-        $orders = wc_get_orders([
-            'customer_id' => $customer_id,
-            'limit' => 20,
-            'orderby' => 'date',
-            'order' => 'DESC',
-        ]);
-        foreach ($orders as $order) {
-            if ((string) $order->get_order_number() === $number || (string) $order->get_id() === $number) {
-                return ['order' => $this->order_payload($order)];
-            }
+        if (!$this->valid_order_number($number)) {
+            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'INVALID_ORDER_NUMBER']);
         }
+
+        $order = $this->find_accessible_order_by_number($number, function (WC_Order $order) use ($customer_id): bool {
+            return (int) $order->get_customer_id() === $customer_id;
+        }, $customer_id);
+
+        if ($order instanceof WC_Order) {
+            return ['order' => $this->order_payload($order)];
+        }
+
         throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
     }
 
     private function verify_guest_order(array $args): array {
         $this->require_wc();
-        $number = sanitize_text_field((string) ($args['order_number'] ?? ''));
+        $number = $this->normalize_order_number((string) ($args['order_number'] ?? ''));
         $contact = sanitize_text_field((string) ($args['contact'] ?? ''));
-        if ($number === '' || strlen($number) > 32 || !preg_match('/\A[a-zA-Z0-9_-]+\z/', $number)) {
+        if (!$this->valid_order_number($number)) {
             throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'INVALID_ORDER_NUMBER']);
         }
         if (!$this->valid_guest_contact($contact)) {
             throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'INVALID_GUEST_CONTACT']);
         }
 
-        $order = ctype_digit($number) ? wc_get_order((int) $number) : false;
-        if (!$order instanceof WC_Order || ((string) $order->get_order_number() !== $number && (string) $order->get_id() !== $number)) {
-            throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
-        }
-        if (!$this->guest_order_contact_matches($order, $contact)) {
-            throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
+        $order = $this->find_accessible_order_by_number($number, function (WC_Order $order) use ($contact): bool {
+            return $this->guest_order_contact_matches($order, $contact);
+        });
+
+        if ($order instanceof WC_Order) {
+            return ['order' => $this->guest_order_payload($order)];
         }
 
-        return ['order' => $this->guest_order_payload($order)];
+        throw new RAG_Sync_MCP_Exception('Order is not accessible', -32602, ['error_code' => 'ORDER_NOT_ACCESSIBLE']);
+    }
+
+    private function normalize_order_number(string $number): string {
+        return trim(ltrim(trim(sanitize_text_field($number)), '#'));
+    }
+
+    private function valid_order_number(string $number): bool {
+        return $number !== '' && strlen($number) <= 64 && preg_match('/\A[a-zA-Z0-9_-]+\z/', $number) === 1;
+    }
+
+    private function find_accessible_order_by_number(string $number, callable $can_access, ?int $customer_id = null): ?WC_Order {
+        $number = $this->normalize_order_number($number);
+
+        foreach ($this->order_lookup_candidates($number, $customer_id) as $order) {
+            if (!$this->order_identifier_matches($order, $number)) {
+                continue;
+            }
+            if ($can_access($order)) {
+                return $order;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return WC_Order[]
+     */
+    private function order_lookup_candidates(string $number, ?int $customer_id = null): array {
+        $candidates = [];
+        $seen = [];
+
+        $filtered_candidates = apply_filters('rag_sync_mcp_order_lookup_candidates', [], $number, $customer_id);
+        foreach ((array) $filtered_candidates as $candidate) {
+            $this->add_order_lookup_candidate($candidates, $seen, $candidate);
+        }
+
+        foreach ($this->order_id_candidates_from_number($number) as $order_id) {
+            $this->add_order_lookup_candidate($candidates, $seen, wc_get_order($order_id));
+        }
+
+        foreach ($this->order_number_meta_keys() as $meta_key) {
+            foreach ($this->order_number_query_values($number) as $query_value) {
+                $orders = wc_get_orders([
+                    'type' => 'shop_order',
+                    'limit' => 5,
+                    'orderby' => 'date',
+                    'order' => 'DESC',
+                    'meta_key' => $meta_key,
+                    'meta_value' => $query_value,
+                ]);
+                foreach ($orders as $order) {
+                    $this->add_order_lookup_candidate($candidates, $seen, $order);
+                }
+            }
+        }
+
+        if ($customer_id !== null) {
+            $orders = wc_get_orders([
+                'customer_id' => $customer_id,
+                'limit' => $this->customer_order_scan_limit(),
+                'orderby' => 'date',
+                'order' => 'DESC',
+            ]);
+            foreach ($orders as $order) {
+                $this->add_order_lookup_candidate($candidates, $seen, $order);
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function order_id_candidates_from_number(string $number): array {
+        $ids = [];
+        if (ctype_digit($number)) {
+            $ids[] = (int) $number;
+        }
+        if (preg_match('/(\d+)\z/', $number, $matches)) {
+            $ids[] = (int) $matches[1];
+        }
+
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    /**
+     * @return string[]
+     */
+    private function order_number_query_values(string $number): array {
+        return array_values(array_unique([$number, '#' . $number]));
+    }
+
+    private function add_order_lookup_candidate(array &$candidates, array &$seen, $candidate): void {
+        if (is_numeric($candidate)) {
+            $candidate = wc_get_order((int) $candidate);
+        }
+        if (!$candidate instanceof WC_Order) {
+            return;
+        }
+
+        $order_id = (int) $candidate->get_id();
+        if ($order_id <= 0 || isset($seen[$order_id])) {
+            return;
+        }
+
+        $seen[$order_id] = true;
+        $candidates[] = $candidate;
+    }
+
+    private function order_identifier_matches(WC_Order $order, string $number): bool {
+        $needle = strtolower($number);
+        $identifiers = [
+            (string) $order->get_id(),
+            (string) $order->get_order_number(),
+        ];
+
+        foreach ($this->order_number_meta_keys() as $meta_key) {
+            $meta_value = $order->get_meta($meta_key, true, 'edit');
+            if (is_scalar($meta_value)) {
+                $identifiers[] = (string) $meta_value;
+            }
+        }
+
+        foreach (array_filter(array_map([$this, 'normalize_order_number'], $identifiers)) as $identifier) {
+            if (strtolower($identifier) === $needle) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function order_number_meta_keys(): array {
+        $keys = apply_filters('rag_sync_mcp_order_number_meta_keys', [
+            '_order_number',
+            '_order_number_formatted',
+            '_wc_order_number',
+            '_custom_order_number',
+            '_alg_wc_custom_order_number',
+            '_ywson_custom_number_order',
+            '_ywson_custom_number_order_complete',
+        ]);
+
+        $keys = array_filter(array_map(static function ($key): string {
+            return is_string($key) && preg_match('/\A[a-zA-Z0-9_-]+\z/', $key) === 1 ? $key : '';
+        }, (array) $keys));
+
+        return array_values(array_unique($keys));
+    }
+
+    private function customer_order_scan_limit(): int {
+        $limit = (int) apply_filters('rag_sync_mcp_customer_order_scan_limit', 200);
+        return max(20, min(1000, $limit));
     }
 
     private function get_customer_cart(array $args): array {

@@ -22,6 +22,23 @@ The plugin exposes these order tools when MCP is enabled:
 Both tools are read-only. Guest verification returns only order number, status,
 placed date, currency, total, item count, and shipping method summary.
 
+## Order Number Lookup
+
+The order tools resolve exact WooCommerce order IDs, order numbers with a leading
+`#`, common custom order-number metadata, and a bounded scan of the logged-in
+customer's own recent orders. Guest verification does not scan all orders by
+contact; it first resolves an exact order candidate and then verifies the
+submitted billing email or phone.
+
+Stores using a custom order-number plugin can extend lookup with these filters:
+
+- `rag_sync_mcp_order_number_meta_keys`: add plugin-specific order-number meta
+  keys.
+- `rag_sync_mcp_order_lookup_candidates`: return matching `WC_Order` objects or
+  order IDs for a submitted order number.
+- `rag_sync_mcp_customer_order_scan_limit`: adjust the bounded logged-in
+  customer order scan limit. The default is 200.
+
 ## WordPress Setup
 
 1. Install and activate RAG Sync.

@@ -31,7 +31,9 @@ publishing notes in the final ZIP.
 
 - the configured AskRAG backend URL is an external service
 - when content sync sends posts, pages, products, categories, and coupons
-- when widget chat sends visitor chat/session data
+- when widget chat sends visitor chat/session data, including generated session
+  IDs and logged-in customer ID, email address, display/customer name, optional
+  customer group ID, and previous guest session ID
 - when MCP can return public catalog data and verified customer/order data
 - the provider URL, Terms of Service URL, and Privacy Policy URL
 
