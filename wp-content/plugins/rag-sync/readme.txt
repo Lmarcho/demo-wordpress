@@ -56,6 +56,10 @@ Privacy Policy: https://askrag.app/privacy
 6. Click "Test Connection" to verify the webhook secret, then "Trigger Full Sync" to send existing content.
 7. To enable MCP order tools, enable MCP, create an MCP client token, then copy the MCP endpoint and token into the AskRAG tenant settings.
 
+== User Guide ==
+
+The packaged customer guide is available at `docs/user-guide.md`. It covers installation, connection settings, content sync, widget behavior, MCP live data, coupon disclosure, logged-in order status, guest order verification, privacy boundaries, health checks, and troubleshooting.
+
 == Frequently Asked Questions ==
 
 = Do I need WooCommerce? =
@@ -77,6 +81,10 @@ Logged-in customers use a short-lived customer assertion issued by this site. Gu
 = Where is the MCP setup guide? =
 
 See `docs/order-tools-setup.md` in the plugin package.
+
+= Where is the full customer user guide? =
+
+See `docs/user-guide.md` in the plugin package.
 
 == Changelog ==
 

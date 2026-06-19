@@ -17,6 +17,9 @@ directory.
 ## Required Directory Content
 
 - `readme.txt`
+- `README.md`
+- `docs/user-guide.md`
+- `docs/order-tools-setup.md`
 - `uninstall.php`
 - `index.php` silence files in public directories
 - plugin assets under `assets/`
@@ -45,6 +48,15 @@ For releases with MCP order tools, mention:
 - guest order verification uses order number plus billing email or phone
 - guest responses are limited and do not expose address, email, phone, payment,
   or raw order payloads
+
+## Customer Documentation
+
+- Keep `README.md` as the practical package/repository overview.
+- Keep `docs/user-guide.md` as the customer-facing setup and operations guide.
+- Keep `docs/order-tools-setup.md` as the deeper order-status and guest
+  verification setup guide.
+- Keep `readme.txt` brief and link to the packaged guide instead of duplicating
+  all customer documentation.
 
 ## Release Checks
 
