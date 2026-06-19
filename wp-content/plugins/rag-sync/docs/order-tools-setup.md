@@ -44,7 +44,10 @@ The logged-in customer assertion endpoint is:
 ```
 
 If the official WordPress MCP adapter is installed and active, the plugin also
-registers RAG Sync abilities for compatible clients.
+registers public catalog/content RAG Sync abilities for compatible clients.
+Customer and order tools are intentionally not registered as WordPress abilities;
+they remain available only through the fallback MCP endpoint with the bearer
+token, per-client tool allow-list, and order rate limits.
 
 ## Upgrades
 

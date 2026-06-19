@@ -41,6 +41,18 @@ class RAG_Sync_MCP {
         'get_customer_purchase_history' => 'Return asserted customer product-level purchase history.',
     ];
 
+    private const ABILITY_TOOLS = [
+        'get_store_context',
+        'get_products_live',
+        'search_products_live',
+        'get_category_products',
+        'get_product_variants',
+        'get_related_products',
+        'get_active_promotions',
+        'get_content_live',
+        'search_content_live',
+    ];
+
     private const DEFAULT_CLIENT_TOOLS_BEFORE_POPULARITY = [
         'get_store_context',
         'get_products_live',
@@ -295,23 +307,32 @@ class RAG_Sync_MCP {
 
         wp_register_ability_category('rag-sync-commerce', [
             'label' => __('RAG Sync Commerce', 'rag-sync'),
-            'description' => __('Read-only RAG Sync commerce and content abilities.', 'rag-sync'),
+            'description' => __('Public read-only RAG Sync commerce and content abilities.', 'rag-sync'),
         ]);
 
-        foreach (self::TOOLS as $name => $description) {
+        foreach (self::ABILITY_TOOLS as $name) {
+            $description = self::TOOLS[$name] ?? null;
+            if ($description === null) {
+                continue;
+            }
+
             wp_register_ability('rag-sync/' . str_replace('_', '-', $name), [
                 'label' => ucwords(str_replace('_', ' ', $name)),
                 'description' => $description,
                 'category' => 'rag-sync-commerce',
                 'execute_callback' => function ($input = []) use ($name) {
+                    if (!$this->can_execute_ability_tool($name)) {
+                        return new WP_Error('rag_sync_mcp_access_denied', __('Access denied', 'rag-sync'), ['status' => 403]);
+                    }
+
                     try {
                         return $this->execute_tool($name, is_array($input) ? $input : []);
                     } catch (RAG_Sync_MCP_Exception $e) {
                         return new WP_Error('rag_sync_mcp_error', $e->getMessage(), $e->data);
                     }
                 },
-                'permission_callback' => function () {
-                    return self::is_enabled();
+                'permission_callback' => function () use ($name) {
+                    return $this->can_execute_ability_tool($name);
                 },
                 'input_schema' => $this->schema_for($name),
                 'output_schema' => ['type' => 'object'],
@@ -324,6 +345,10 @@ class RAG_Sync_MCP {
                 ],
             ]);
         }
+    }
+
+    private function can_execute_ability_tool(string $name): bool {
+        return self::is_enabled() && in_array($name, self::ABILITY_TOOLS, true);
     }
 
     public function map_adapter_tool_name(string $tool_name, $ability = null): string {

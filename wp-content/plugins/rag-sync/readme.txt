@@ -27,7 +27,7 @@ The widget bundle is loaded with a cache-busting token derived from the deployed
 * An AskRAG backend with a tenant slug, widget API key, and webhook secret.
 * PHP 8.0 or higher.
 * WooCommerce 8.0+ is optional; product/category/coupon features activate only when WooCommerce is present.
-* WordPress 6.9+ can expose registered RAG Sync abilities to compatible MCP adapter installs. Older WordPress versions use the plugin's fallback MCP endpoint.
+* WordPress 6.9+ can expose public catalog/content RAG Sync abilities to compatible MCP adapter installs. Customer and order tools use the plugin's token-protected fallback MCP endpoint.
 
 == External Services ==
 
@@ -37,7 +37,7 @@ What is sent and when:
 
 * When sync is enabled and content changes (or you trigger a full sync), the plugin sends your posts, pages, products, categories, and coupons — including titles, descriptions, prices, stock, and SKUs — to your configured Backend URL via signed webhooks.
 * When the chat widget is enabled, each visitor's browser loads the widget script from your Backend URL and sends chat messages, plus minimal session/customer context (a generated session ID, and for logged-in users their WooCommerce/WordPress identifiers) to that backend to generate answers.
-* When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, customer-owned WooCommerce order/history/cart data when a logged-in customer assertion is provided, and limited guest order status when the submitted order number matches the billing email or phone.
+* When MCP is enabled, your configured AskRAG backend can call read-only MCP tools on this WordPress site using the MCP bearer token you create. These tools may return public content, public product/catalog data, allow-listed coupon details, customer-owned WooCommerce order/history/cart data when a logged-in customer assertion is provided, and limited guest order status when the submitted order number matches the billing email or phone. WordPress Abilities registration is limited to public catalog/content tools; customer and order tools are not registered as public abilities.
 * A lightweight request is made from the server to the Backend URL to detect the current widget version for cache-busting.
 
 No data is sent to any party other than the Backend URL you configure.
