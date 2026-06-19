@@ -9,6 +9,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- RAG Sync owns this custom tracking table; table names are escaped and user values are prepared by method.
+
 class RAG_Sync_DB {
 
     /**
@@ -22,6 +24,10 @@ class RAG_Sync_DB {
     public static function get_table_name(): string {
         global $wpdb;
         return $wpdb->prefix . self::TABLE_NAME;
+    }
+
+    private static function escaped_table_name(): string {
+        return esc_sql(self::get_table_name());
     }
 
     /**
@@ -65,7 +71,8 @@ class RAG_Sync_DB {
      */
     public static function drop_table(): void {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $wpdb->query("DROP TABLE IF EXISTS {$table_name}");
     }
 
@@ -74,8 +81,9 @@ class RAG_Sync_DB {
      */
     public static function get_or_create_item(string $type, int $item_id, string $name, ?string $sku = null): ?object {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $item = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM {$table_name} WHERE item_type = %s AND item_id = %d",
             $type,
@@ -93,6 +101,7 @@ class RAG_Sync_DB {
                 'updated_at' => current_time('mysql'),
             ]);
 
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
             $item = $wpdb->get_row($wpdb->prepare(
                 "SELECT * FROM {$table_name} WHERE id = %d",
                 $wpdb->insert_id
@@ -118,7 +127,7 @@ class RAG_Sync_DB {
      */
     public static function update_status(string $type, int $item_id, string $status, ?string $error = null): void {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $data = [
             'status' => $status,
@@ -128,6 +137,7 @@ class RAG_Sync_DB {
         if ($status === 'synced') {
             $data['last_synced'] = current_time('mysql');
             $data['error_message'] = null;
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
             $data['sync_count'] = $wpdb->get_var($wpdb->prepare(
                 "SELECT sync_count FROM {$table_name} WHERE item_type = %s AND item_id = %d",
                 $type,
@@ -154,7 +164,7 @@ class RAG_Sync_DB {
      */
     public static function record_webhook(string $type, int $item_id, string $topic, ?string $response = null): void {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $wpdb->update(
             $table_name,
@@ -177,7 +187,7 @@ class RAG_Sync_DB {
      */
     public static function mark_modified(string $type, int $item_id): void {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $wpdb->update(
             $table_name,
@@ -198,7 +208,7 @@ class RAG_Sync_DB {
      */
     public static function mark_deleted(string $type, int $item_id): void {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $wpdb->update(
             $table_name,
@@ -218,7 +228,7 @@ class RAG_Sync_DB {
      */
     public static function get_items(array $args = []): array {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $defaults = [
             'type' => '',
@@ -254,22 +264,30 @@ class RAG_Sync_DB {
 
         $where_clause = implode(' AND ', $where);
 
-        // Get total count
-        $count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_clause}";
-        if (!empty($params)) {
-            $count_sql = $wpdb->prepare($count_sql, $params);
+        // Get total count.
+        if (empty($params)) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table name and allow-listed WHERE clause are safe.
+            $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_name} WHERE {$where_clause}");
+        } else {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table name and allow-listed WHERE clause are safe.
+            $total = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table_name} WHERE {$where_clause}",
+                ...$params
+            ));
         }
-        $total = (int) $wpdb->get_var($count_sql);
 
         // Get items
         $orderby = sanitize_sql_orderby($args['orderby'] . ' ' . $args['order']) ?: 'updated_at DESC';
         $offset = ($args['page'] - 1) * $args['per_page'];
 
-        $sql = "SELECT * FROM {$table_name} WHERE {$where_clause} ORDER BY {$orderby} LIMIT %d OFFSET %d";
         $params[] = $args['per_page'];
         $params[] = $offset;
 
-        $items = $wpdb->get_results($wpdb->prepare($sql, $params));
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table name and ORDER BY are escaped/allow-listed above.
+        $items = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table_name} WHERE {$where_clause} ORDER BY {$orderby} LIMIT %d OFFSET %d",
+            ...$params
+        ));
 
         return [
             'items' => $items,
@@ -284,7 +302,7 @@ class RAG_Sync_DB {
      */
     public static function get_stats(): array {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         $stats = [
             'total' => 0,
@@ -293,10 +311,12 @@ class RAG_Sync_DB {
         ];
 
         // Total count
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $stats['total'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_name}");
 
         // By type
         $type_results = $wpdb->get_results(
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
             "SELECT item_type, COUNT(*) as count FROM {$table_name} GROUP BY item_type"
         );
         foreach ($type_results as $row) {
@@ -305,6 +325,7 @@ class RAG_Sync_DB {
 
         // By status
         $status_results = $wpdb->get_results(
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
             "SELECT status, COUNT(*) as count FROM {$table_name} GROUP BY status"
         );
         foreach ($status_results as $row) {
@@ -313,6 +334,7 @@ class RAG_Sync_DB {
 
         // Last sync time
         $stats['last_sync'] = $wpdb->get_var(
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
             "SELECT MAX(last_synced) FROM {$table_name} WHERE last_synced IS NOT NULL"
         );
 
@@ -324,7 +346,7 @@ class RAG_Sync_DB {
      */
     public static function bulk_update_status(array $ids, string $status): int {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
         if (empty($ids)) {
             return 0;
@@ -332,9 +354,10 @@ class RAG_Sync_DB {
 
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table name and generated integer placeholders are safe.
         return $wpdb->query($wpdb->prepare(
             "UPDATE {$table_name} SET status = %s, updated_at = %s WHERE id IN ({$placeholders})",
-            array_merge([$status, current_time('mysql')], $ids)
+            ...array_merge([$status, current_time('mysql')], $ids)
         ));
     }
 
@@ -343,8 +366,9 @@ class RAG_Sync_DB {
      */
     public static function cleanup_deleted(int $days = 30): int {
         global $wpdb;
-        $table_name = self::get_table_name();
+        $table_name = self::escaped_table_name();
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         return $wpdb->query($wpdb->prepare(
             "DELETE FROM {$table_name} WHERE status = 'deleted' AND updated_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
             $days

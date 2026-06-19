@@ -203,7 +203,7 @@ class RAG_Sync_Webhook {
             !empty($context) ? wp_json_encode($context) : ''
         );
 
-        error_log($log_message);
+        do_action('rag_sync_log', $log_message, $level, $context);
     }
 
     // =========================================
@@ -222,6 +222,7 @@ class RAG_Sync_Webhook {
             'slug' => $post->post_name,
             'type' => $post->post_type,
             'status' => $post->post_status,
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applying the core content filter before syncing published content.
             'content' => apply_filters('the_content', $post->post_content),
             'excerpt' => get_the_excerpt($post),
             'author' => $author ? $author->display_name : null,
@@ -244,6 +245,7 @@ class RAG_Sync_Webhook {
             'title' => get_the_title($page),
             'slug' => $page->post_name,
             'status' => $page->post_status,
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applying the core content filter before syncing published content.
             'content' => apply_filters('the_content', $page->post_content),
             'excerpt' => get_the_excerpt($page),
             'url' => get_permalink($page),

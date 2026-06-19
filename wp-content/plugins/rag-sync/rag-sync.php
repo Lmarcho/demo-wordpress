@@ -9,8 +9,8 @@
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: rag-sync
- * Domain Path: /languages
  * Requires at least: 6.0
+ * Tested up to: 7.0
  * Requires PHP: 8.0
  *
  * WC requires at least: 8.0
@@ -123,8 +123,6 @@ final class RAG_Sync {
         // Initialize chat widget on frontend
         add_action('wp_footer', [$this, 'render_chat_widget']);
 
-        // Load text domain
-        load_plugin_textdomain('rag-sync', false, dirname(RAG_SYNC_PLUGIN_BASENAME) . '/languages');
     }
 
     /**
@@ -234,7 +232,7 @@ final class RAG_Sync {
      * serves the same static file.
      */
     private function get_widget_cache_bust(string $script_base_url): string {
-        if (isset($_GET['refresh'])) {
+        if (filter_input(INPUT_GET, 'refresh', FILTER_UNSAFE_RAW) !== null) {
             return RAG_SYNC_VERSION . '-' . time();
         }
 

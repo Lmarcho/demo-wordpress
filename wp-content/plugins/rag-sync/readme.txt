@@ -2,7 +2,7 @@
 Contributors: askrag
 Tags: ai, chatbot, woocommerce, rag, chat widget
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.0
 Stable tag: 1.0.3
 License: GPLv2 or later

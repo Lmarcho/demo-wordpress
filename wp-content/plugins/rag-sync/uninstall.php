@@ -14,8 +14,10 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 
 global $wpdb;
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall removes plugin-owned options, transients, and custom tables.
+
 // Remove plugin options.
-$options = [
+$rag_sync_options = [
     'rag_sync_backend_url',
     'rag_sync_tenant_slug',
     'rag_sync_api_key',
@@ -40,8 +42,8 @@ $options = [
     'rag_sync_db_version',
 ];
 
-foreach ($options as $option) {
-    delete_option($option);
+foreach ($rag_sync_options as $rag_sync_option) {
+    delete_option($rag_sync_option);
 }
 
 // Remove transients.
@@ -56,12 +58,14 @@ $wpdb->query(
 );
 
 // Drop the sync tracking table.
-$table_name = $wpdb->prefix . 'rag_sync_items';
-$wpdb->query("DROP TABLE IF EXISTS {$table_name}");
+$rag_sync_table_name = esc_sql($wpdb->prefix . 'rag_sync_items');
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
+$wpdb->query("DROP TABLE IF EXISTS {$rag_sync_table_name}");
 
 // Drop MCP clients table.
-$mcp_table_name = $wpdb->prefix . 'rag_sync_mcp_clients';
-$wpdb->query("DROP TABLE IF EXISTS {$mcp_table_name}");
+$rag_sync_mcp_table_name = esc_sql($wpdb->prefix . 'rag_sync_mcp_clients');
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
+$wpdb->query("DROP TABLE IF EXISTS {$rag_sync_mcp_table_name}");
 
 // Clear any scheduled events.
 wp_clear_scheduled_hook('rag_sync_full_sync');

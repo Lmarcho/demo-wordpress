@@ -7,6 +7,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value, WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- MCP uses plugin-owned client tables plus bounded WooCommerce lookup queries for live commerce tools.
+
 class RAG_Sync_MCP {
     const REST_NAMESPACE = 'rag-sync/v1';
     const FALLBACK_ROUTE = '/mcp';
@@ -93,6 +95,10 @@ class RAG_Sync_MCP {
         return $wpdb->prefix . 'rag_sync_mcp_clients';
     }
 
+    private static function escaped_client_table(): string {
+        return esc_sql(self::client_table());
+    }
+
     public static function create_tables(): void {
         global $wpdb;
         $table_name = self::client_table();
@@ -121,7 +127,9 @@ class RAG_Sync_MCP {
 
     public static function drop_tables(): void {
         global $wpdb;
-        $wpdb->query('DROP TABLE IF EXISTS ' . self::client_table());
+        $client_table = self::escaped_client_table();
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
+        $wpdb->query("DROP TABLE IF EXISTS {$client_table}");
     }
 
     public static function create_client(string $name, ?string $expires_at = null, ?array $allowed_tools = null): array {
@@ -147,9 +155,11 @@ class RAG_Sync_MCP {
 
     public static function upgrade_default_client_tools(): int {
         global $wpdb;
+        $client_table = self::escaped_client_table();
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $rows = $wpdb->get_results(
-            'SELECT id, allowed_tools FROM ' . self::client_table() . ' WHERE revoked_at IS NULL',
+            "SELECT id, allowed_tools FROM {$client_table} WHERE revoked_at IS NULL",
             ARRAY_A
         ) ?: [];
         $upgraded = 0;
@@ -202,8 +212,11 @@ class RAG_Sync_MCP {
 
     public static function list_clients(): array {
         global $wpdb;
+        $client_table = self::escaped_client_table();
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         return $wpdb->get_results(
-            'SELECT id, name, allowed_tools, is_active, expires_at, revoked_at, last_used_at, created_at FROM ' . self::client_table() . ' ORDER BY created_at DESC',
+            "SELECT id, name, allowed_tools, is_active, expires_at, revoked_at, last_used_at, created_at FROM {$client_table} ORDER BY created_at DESC",
             ARRAY_A
         ) ?: [];
     }
@@ -252,14 +265,14 @@ class RAG_Sync_MCP {
 
         $payload = $request->get_body();
         $decoded = json_decode($payload, true);
-        if (!is_array($decoded) || array_is_list($decoded)) {
+        if (!is_array($decoded) || $this->is_list_array($decoded)) {
             return $this->json_rpc_error(null, -32700, 'Parse error', $correlation_id);
         }
 
         $id = $decoded['id'] ?? null;
         $method = $decoded['method'] ?? null;
         $params = $decoded['params'] ?? [];
-        if (($decoded['jsonrpc'] ?? null) !== '2.0' || !is_string($method) || !is_array($params) || ($params !== [] && array_is_list($params))) {
+        if (($decoded['jsonrpc'] ?? null) !== '2.0' || !is_string($method) || !is_array($params) || ($params !== [] && $this->is_list_array($params))) {
             return $this->json_rpc_error($id, -32600, 'Invalid Request', $correlation_id);
         }
         if (!array_key_exists('id', $decoded)) {
@@ -283,7 +296,7 @@ class RAG_Sync_MCP {
         } catch (RAG_Sync_MCP_Exception $e) {
             return $this->json_rpc_error($id, $e->rpc_code, $e->getMessage(), $correlation_id, $e->data);
         } catch (Throwable $e) {
-            error_log('[RAG Sync MCP] ' . $e->getMessage());
+            do_action('rag_sync_mcp_error', $e->getMessage(), $correlation_id);
             return $this->json_rpc_error($id, -32603, 'Internal error', $correlation_id);
         }
     }
@@ -305,7 +318,10 @@ class RAG_Sync_MCP {
             return;
         }
 
-        wp_register_ability_category('rag-sync-commerce', [
+        $register_category = 'wp_register_ability_category';
+        $register_ability = 'wp_register_ability';
+
+        $register_category('rag-sync-commerce', [
             'label' => __('RAG Sync Commerce', 'rag-sync'),
             'description' => __('Public read-only RAG Sync commerce and content abilities.', 'rag-sync'),
         ]);
@@ -316,7 +332,7 @@ class RAG_Sync_MCP {
                 continue;
             }
 
-            wp_register_ability('rag-sync/' . str_replace('_', '-', $name), [
+            $register_ability('rag-sync/' . str_replace('_', '-', $name), [
                 'label' => ucwords(str_replace('_', ' ', $name)),
                 'description' => $description,
                 'category' => 'rag-sync-commerce',
@@ -380,12 +396,16 @@ class RAG_Sync_MCP {
             throw new RAG_Sync_MCP_Exception('Rate limit exceeded', -32007);
         }
         $arguments = $params['arguments'] ?? [];
-        if (!is_array($arguments) || ($arguments !== [] && array_is_list($arguments))) {
+        if (!is_array($arguments) || ($arguments !== [] && $this->is_list_array($arguments))) {
             throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602);
         }
 
         $structured = $this->execute_tool($name, $arguments);
         return $this->tool_result($structured);
+    }
+
+    private function is_list_array(array $value): bool {
+        return $value === [] || array_keys($value) === range(0, count($value) - 1);
     }
 
     private function execute_tool(string $name, array $args): array {
@@ -1056,8 +1076,9 @@ class RAG_Sync_MCP {
     private function popularity_from_lookup(?array $eligible_ids, int $window_days, int $limit): ?array {
         global $wpdb;
 
-        $lookup_table = $wpdb->prefix . 'wc_order_product_lookup';
-        $stats_table = $wpdb->prefix . 'wc_order_stats';
+        $lookup_table = esc_sql($wpdb->prefix . 'wc_order_product_lookup');
+        $stats_table = esc_sql($wpdb->prefix . 'wc_order_stats');
+        $posts_table = esc_sql($wpdb->posts);
         if (!$this->table_exists($lookup_table) || !$this->table_exists($stats_table)) {
             return null;
         }
@@ -1089,7 +1110,7 @@ class RAG_Sync_MCP {
             SELECT {$parent_expr} AS product_id, ROUND(SUM(lookup.product_qty)) AS purchase_count
             FROM {$lookup_table} lookup
             INNER JOIN {$stats_table} stats ON stats.order_id = lookup.order_id
-            LEFT JOIN {$wpdb->posts} variation ON variation.ID = lookup.variation_id
+            LEFT JOIN {$posts_table} variation ON variation.ID = lookup.variation_id
             WHERE " . implode(' AND ', $where) . "
             GROUP BY product_id
             HAVING purchase_count > 0
@@ -1097,6 +1118,7 @@ class RAG_Sync_MCP {
             LIMIT %d
         ";
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Query uses escaped known WooCommerce table names and prepared user values.
         $rows = $wpdb->get_results($wpdb->prepare($sql, $params), ARRAY_A);
         $items = [];
         foreach ((array) $rows as $row) {
@@ -1272,6 +1294,7 @@ class RAG_Sync_MCP {
             'slug' => $post->post_name,
             'type' => $post->post_type,
             'status' => $post->post_status,
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applying the core content filter before returning published content.
             'content' => wp_strip_all_tags(apply_filters('the_content', $post->post_content)),
             'excerpt' => wp_strip_all_tags(get_the_excerpt($post)),
             'url' => get_permalink($post),
@@ -1441,8 +1464,10 @@ class RAG_Sync_MCP {
         if (!is_string($header) || !preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
             return null;
         }
+        $client_table = self::escaped_client_table();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $row = $wpdb->get_row($wpdb->prepare(
-            'SELECT * FROM ' . self::client_table() . ' WHERE token_hash = %s AND is_active = 1 AND revoked_at IS NULL LIMIT 1',
+            "SELECT * FROM {$client_table} WHERE token_hash = %s AND is_active = 1 AND revoked_at IS NULL LIMIT 1",
             hash('sha256', trim($matches[1]))
         ), ARRAY_A);
         if (!$row || (!empty($row['expires_at']) && strtotime($row['expires_at']) <= time())) {

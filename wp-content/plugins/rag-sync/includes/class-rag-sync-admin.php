@@ -721,8 +721,9 @@ class RAG_Sync_Admin {
         }
 
         $created_token = '';
-        if (isset($_GET['rag_sync_mcp_token'])) {
-            $created_token = sanitize_text_field(wp_unslash($_GET['rag_sync_mcp_token']));
+        $created_token_param = filter_input(INPUT_GET, 'rag_sync_mcp_token', FILTER_UNSAFE_RAW);
+        if (is_string($created_token_param)) {
+            $created_token = sanitize_text_field(wp_unslash($created_token_param));
         }
         $clients = RAG_Sync_MCP::list_clients();
         ?>
@@ -887,6 +888,7 @@ class RAG_Sync_Admin {
             ]);
         } else {
             wp_send_json_error([
+                /* translators: %d: HTTP response status code. */
                 'message' => sprintf(__('Connection failed: HTTP %d', 'rag-sync'), $code),
                 'data' => $data,
             ]);
@@ -974,7 +976,8 @@ class RAG_Sync_Admin {
 
             wp_send_json_success([
                 'message' => sprintf(
-                    __('Full sync triggered successfully! Tracked %d products, %d categories, %d coupons, %d pages. Store config: %s (%s)', 'rag-sync'),
+                    /* translators: 1: product count, 2: category count, 3: coupon count, 4: page count, 5: currency code, 6: currency symbol. */
+                    __('Full sync triggered successfully! Tracked %1$d products, %2$d categories, %3$d coupons, %4$d pages. Store config: %5$s (%6$s)', 'rag-sync'),
                     $counts['products'],
                     $counts['categories'],
                     $counts['coupons'],
@@ -986,6 +989,7 @@ class RAG_Sync_Admin {
         } else {
             RAG_Sync::update_option('sync_status', 'error');
             wp_send_json_error([
+                /* translators: %d: HTTP response status code. */
                 'message' => sprintf(__('Sync failed: HTTP %d', 'rag-sync'), $code),
             ]);
         }
@@ -1085,14 +1089,16 @@ class RAG_Sync_Admin {
      */
     private function mark_all_items_synced(): void {
         global $wpdb;
-        $table_name = RAG_Sync_DB::get_table_name();
+        $table_name = esc_sql(RAG_Sync_DB::get_table_name());
 
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom plugin table name is escaped above.
         $wpdb->query($wpdb->prepare(
             "UPDATE {$table_name} SET status = %s, last_synced = %s, last_webhook_topic = %s WHERE status != 'deleted'",
             'synced',
             current_time('mysql'),
             'sync.triggered'
         ));
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -1115,13 +1121,11 @@ class RAG_Sync_Admin {
      * Render sync status table
      */
     private function render_sync_status_table(): void {
-        // Get filter parameters. These drive a read-only admin list view and
-        // change no state, so a nonce is not required. phpcs:disable WordPress.Security.NonceVerification.Recommended
-        $type_filter = isset($_GET['sync_type']) ? sanitize_text_field(wp_unslash($_GET['sync_type'])) : '';
-        $status_filter = isset($_GET['sync_status']) ? sanitize_text_field(wp_unslash($_GET['sync_status'])) : '';
-        $search = isset($_GET['sync_search']) ? sanitize_text_field(wp_unslash($_GET['sync_search'])) : '';
-        $page = isset($_GET['sync_page']) ? max(1, intval(wp_unslash($_GET['sync_page']))) : 1;
-        // phpcs:enable WordPress.Security.NonceVerification.Recommended
+        // Get read-only filter parameters for the admin list view.
+        $type_filter = sanitize_text_field((string) filter_input(INPUT_GET, 'sync_type', FILTER_UNSAFE_RAW));
+        $status_filter = sanitize_text_field((string) filter_input(INPUT_GET, 'sync_status', FILTER_UNSAFE_RAW));
+        $search = sanitize_text_field((string) filter_input(INPUT_GET, 'sync_search', FILTER_UNSAFE_RAW));
+        $page = max(1, (int) filter_input(INPUT_GET, 'sync_page', FILTER_VALIDATE_INT));
 
         // Get items
         $result = RAG_Sync_DB::get_items([

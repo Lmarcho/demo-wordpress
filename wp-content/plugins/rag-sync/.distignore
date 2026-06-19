@@ -1,6 +1,7 @@
 .git
 .github
 .svn
+.distignore
 .DS_Store
 node_modules
 npm-debug.log
@@ -9,4 +10,5 @@ tests
 coverage
 html
 *.map
+MARKETPLACE_CHECKLIST.md
 PUBLISHING.md
