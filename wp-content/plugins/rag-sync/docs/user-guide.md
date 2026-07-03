@@ -2,7 +2,7 @@
 
 Plugin: RAG Sync
 
-Version: 1.0.3
+Version: 1.0.4
 
 Audience: WordPress administrators, WooCommerce store operators, and AskRAG
 integration operators

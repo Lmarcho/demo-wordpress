@@ -4,7 +4,7 @@ This guide covers the WooCommerce order tools used by the AskRAG widget.
 
 ## Required Versions
 
-- RAG Sync plugin: 1.0.3 or later.
+- RAG Sync plugin: 1.0.4 or later.
 - WordPress: 6.0 or later. Tested locally with WordPress 6.9.
 - WooCommerce: 8.0 or later for order tools. Tested locally with WooCommerce 10.4.3.
 - AskRAG backend: must support the widget order verification endpoint and the

@@ -4,7 +4,7 @@ Tags: ai, chatbot, woocommerce, rag, chat widget
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -88,6 +88,11 @@ See `docs/user-guide.md` in the plugin package.
 
 == Changelog ==
 
+= 1.0.4 =
+* Hardened MCP catalog-client defaults so customer/order/cart/history tools require deliberate enablement.
+* Added MCP request and response size limits.
+* Improved product-reference limit handling for MCP product hydration.
+
 = 1.0.3 =
 * Added guest WooCommerce order verification through MCP using order number plus billing email or phone.
 * Improved WooCommerce order lookup for custom order numbers and customers with more than 20 orders.
@@ -104,6 +109,9 @@ See `docs/user-guide.md` in the plugin package.
 * Widget cache-busting derived from the deployed bundle to avoid stale copies.
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+Default MCP clients are restricted to public catalog/content tools during plugin upgrade.
 
 = 1.0.3 =
 Default MCP clients receive the new guest order verification tool during plugin upgrade.
