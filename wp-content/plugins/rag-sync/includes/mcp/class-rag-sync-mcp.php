@@ -25,6 +25,8 @@ class RAG_Sync_MCP {
 
     private const PROTOCOL_VERSION = '2025-11-25';
     private const SERVER_NAME = 'RAG Sync Commerce MCP';
+    private const MAX_REQUEST_BYTES = 262144;
+    private const MAX_RESPONSE_BYTES = 2097152;
 
     private const TOOLS = [
         'get_store_context' => 'Return WordPress/WooCommerce public store context.',
@@ -55,6 +57,26 @@ class RAG_Sync_MCP {
         'search_content_live',
     ];
 
+    private const DEFAULT_CATALOG_CLIENT_TOOLS = [
+        'get_store_context',
+        'get_products_live',
+        'search_products_live',
+        'get_category_products',
+        'get_product_variants',
+        'get_related_products',
+        'get_active_promotions',
+        'get_product_popularity',
+        'get_content_live',
+        'search_content_live',
+    ];
+
+    private const CUSTOMER_DATA_TOOLS = [
+        'get_order_status',
+        'verify_guest_order',
+        'get_customer_cart',
+        'get_customer_purchase_history',
+    ];
+
     private const DEFAULT_CLIENT_TOOLS_BEFORE_POPULARITY = [
         'get_store_context',
         'get_products_live',
@@ -65,9 +87,6 @@ class RAG_Sync_MCP {
         'get_active_promotions',
         'get_content_live',
         'search_content_live',
-        'get_order_status',
-        'get_customer_cart',
-        'get_customer_purchase_history',
     ];
 
     public function __construct() {
@@ -135,7 +154,7 @@ class RAG_Sync_MCP {
     public static function create_client(string $name, ?string $expires_at = null, ?array $allowed_tools = null): array {
         global $wpdb;
         $token = self::generate_token();
-        $tools = $allowed_tools ?: array_keys(self::TOOLS);
+        $tools = $allowed_tools ?: self::DEFAULT_CATALOG_CLIENT_TOOLS;
 
         $wpdb->insert(self::client_table(), [
             'name' => sanitize_text_field($name),
@@ -176,7 +195,8 @@ class RAG_Sync_MCP {
                 continue;
             }
 
-            $merged = array_values(array_unique(array_merge($tools, $current_tools)));
+            $catalog_only_tools = array_values(array_diff($tools, self::CUSTOMER_DATA_TOOLS));
+            $merged = array_values(array_unique(array_merge($catalog_only_tools, self::DEFAULT_CATALOG_CLIENT_TOOLS)));
             sort($tools);
             $sorted_merged = $merged;
             sort($sorted_merged);
@@ -264,6 +284,10 @@ class RAG_Sync_MCP {
         }
 
         $payload = $request->get_body();
+        if (strlen($payload) > self::MAX_REQUEST_BYTES) {
+            return $this->json_rpc_error(null, -32600, 'Request too large', $correlation_id, ['error_code' => 'REQUEST_TOO_LARGE'], 413);
+        }
+
         $decoded = json_decode($payload, true);
         if (!is_array($decoded) || $this->is_list_array($decoded)) {
             return $this->json_rpc_error(null, -32700, 'Parse error', $correlation_id);
@@ -288,11 +312,18 @@ class RAG_Sync_MCP {
                 default => throw new RAG_Sync_MCP_Exception('Method not found', -32601),
             };
             $result['_meta']['correlation_id'] = $correlation_id;
-            return new WP_REST_Response([
+            $envelope = [
                 'jsonrpc' => '2.0',
                 'id' => $id,
                 'result' => $result,
-            ], 200, $this->no_cache_headers($correlation_id));
+            ];
+
+            $encoded = wp_json_encode($envelope);
+            if (is_string($encoded) && strlen($encoded) > self::MAX_RESPONSE_BYTES) {
+                return $this->json_rpc_error($id, -32008, 'Response too large', $correlation_id, ['error_code' => 'RESPONSE_TOO_LARGE'], 413);
+            }
+
+            return new WP_REST_Response($envelope, 200, $this->no_cache_headers($correlation_id));
         } catch (RAG_Sync_MCP_Exception $e) {
             return $this->json_rpc_error($id, $e->rpc_code, $e->getMessage(), $correlation_id, $e->data);
         } catch (Throwable $e) {
@@ -513,12 +544,14 @@ class RAG_Sync_MCP {
     private function get_products_live(array $args): array {
         $this->require_wc();
         $max = $this->max_skus();
-        $skus = array_slice(array_values(array_unique(array_filter(array_map('strval', $args['skus'] ?? [])))), 0, $max);
-        $product_ids = array_slice(
-            array_values(array_unique(array_filter(array_map('absint', $args['product_ids'] ?? [])))),
-            0,
-            max(0, $max - count($skus))
-        );
+        $skus = array_values(array_unique(array_filter(array_map('strval', $args['skus'] ?? []))));
+        $product_ids = array_values(array_unique(array_filter(array_map('absint', $args['product_ids'] ?? []))));
+        if ((count($skus) + count($product_ids)) > $max) {
+            throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, [
+                'error_code' => 'LIMIT_EXCEEDED',
+                'max_references' => $max,
+            ]);
+        }
         if (!$skus && !$product_ids) {
             throw new RAG_Sync_MCP_Exception('Invalid tool arguments', -32602, ['error_code' => 'PRODUCT_REFERENCES_REQUIRED']);
         }
